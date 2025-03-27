@@ -1,39 +1,37 @@
-
+import { z } from "zod";
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import * as z from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 
 type AuthFormProps = {
-  type: "login" | "register";
+  type: "login" | "register" | "forgotPassword";
 };
 
 const loginSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email address" }),
-  password: z.string().min(8, { message: "Password must be at least 8 characters" }),
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   rememberMe: z.boolean().optional(),
 });
 
 const registerSchema = z.object({
-  firstName: z.string().min(1, { message: "First name is required" }),
-  lastName: z.string().min(1, { message: "Last name is required" }),
-  email: z.string().email({ message: "Please enter a valid email address" }),
-  password: z.string().min(8, { message: "Password must be at least 8 characters" }),
-  confirmPassword: z.string().min(8, { message: "Please confirm your password" }),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  email: z.string().email("Please enter a valid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Confirm password must be at least 8 characters"),
   acceptTerms: z.literal(true, {
     errorMap: () => ({ message: "You must accept the terms and conditions" }),
   }),
@@ -42,13 +40,20 @@ const registerSchema = z.object({
   path: ["confirmPassword"],
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
-type RegisterFormValues = z.infer<typeof registerSchema>;
+const forgotPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+});
 
 const AuthForm = ({ type }: AuthFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
 
-  const loginForm = useForm<LoginFormValues>({
+  const schema = type === "login" 
+    ? loginSchema 
+    : type === "register" 
+      ? registerSchema 
+      : forgotPasswordSchema;
+
+  const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
@@ -57,7 +62,7 @@ const AuthForm = ({ type }: AuthFormProps) => {
     },
   });
 
-  const registerForm = useForm<RegisterFormValues>({
+  const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       firstName: "",
@@ -69,7 +74,7 @@ const AuthForm = ({ type }: AuthFormProps) => {
     },
   });
 
-  const onLoginSubmit = async (data: LoginFormValues) => {
+  const onLoginSubmit = async (data: z.infer<typeof loginSchema>) => {
     try {
       setIsLoading(true);
       console.log(data);
@@ -95,7 +100,7 @@ const AuthForm = ({ type }: AuthFormProps) => {
     }
   };
 
-  const onRegisterSubmit = async (data: RegisterFormValues) => {
+  const onRegisterSubmit = async (data: z.infer<typeof registerSchema>) => {
     try {
       setIsLoading(true);
       console.log(data);

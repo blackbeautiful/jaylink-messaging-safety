@@ -14,6 +14,8 @@ import VoiceCalls from "./pages/VoiceCalls";
 import UploadAudio from "./pages/UploadAudio";
 import Analytics from "./pages/Analytics";
 import Balance from "./pages/Balance";
+import Groups from "./pages/Groups";
+import Scheduled from "./pages/Scheduled";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +38,8 @@ const App = () => (
             <Route path="/upload-audio" element={<UploadAudio />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/balance" element={<Balance />} />
+            <Route path="/groups" element={<Groups />} />
+            <Route path="/scheduled" element={<Scheduled />} />
             <Route path="/settings" element={<Settings />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

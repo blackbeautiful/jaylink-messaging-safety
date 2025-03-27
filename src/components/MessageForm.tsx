@@ -1,405 +1,558 @@
 
-import { useState, useRef } from "react";
-import { motion } from "framer-motion";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { format } from "date-fns";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Upload, Loader2, Send, FileText, HelpCircle, Calendar } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { CalendarIcon, ChevronDown, Upload } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+import apiService from "@/utils/apiService";
+
+// Define the form schema
+const messageFormSchema = z.object({
+  recipients: z.string().min(1, { message: "Please enter at least one recipient" }),
+  message: z.string().min(1, { message: "Message is required" }).max(918, {
+    message: "Message cannot be longer than 918 characters (6 concatenated SMS)",
+  }),
+  senderId: z.string().min(1, { message: "Sender ID is required" }).max(11, {
+    message: "Sender ID cannot be longer than 11 characters",
+  }),
+  schedule: z.boolean().default(false),
+  scheduledDate: z.date().optional(),
+});
+
+// Extending the schema for bulk SMS
+const bulkMessageFormSchema = messageFormSchema.extend({
+  csvFile: z.instanceof(FileList).refine((files) => files.length > 0, {
+    message: "Please upload a CSV file",
+  }),
+});
+
+type MessageFormValues = z.infer<typeof messageFormSchema>;
+type BulkMessageFormValues = z.infer<typeof bulkMessageFormSchema>;
 
 const MessageForm = () => {
-  const [loading, setLoading] = useState(false);
-  const [messageType, setMessageType] = useState("sms");
-  const [bulkMode, setBulkMode] = useState(false);
-  const [scheduledMessage, setScheduledMessage] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const csvInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTab, setSelectedTab] = useState("single");
+  const [characterCount, setCharacterCount] = useState(0);
+  const [smsCount, setSmsCount] = useState(1);
   
-  const [formData, setFormData] = useState({
-    recipients: "",
-    message: "",
-    senderId: "",
-    audioFile: null as File | null,
-    csvFile: null as File | null,
-    recipientCount: 0,
+  // Form for single SMS
+  const form = useForm<MessageFormValues>({
+    resolver: zodResolver(messageFormSchema),
+    defaultValues: {
+      recipients: "",
+      message: "",
+      senderId: "",
+      schedule: false,
+    },
   });
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFormData({
-        ...formData,
-        audioFile: e.target.files[0],
-      });
+  
+  // Form for bulk SMS
+  const bulkForm = useForm<BulkMessageFormValues>({
+    resolver: zodResolver(bulkMessageFormSchema),
+    defaultValues: {
+      recipients: "",
+      message: "",
+      senderId: "",
+      schedule: false,
+      csvFile: undefined,
+    },
+  });
+  
+  // Calculate SMS count based on message length
+  const calculateSMSCount = (message: string) => {
+    const length = message.length;
+    setCharacterCount(length);
+    
+    if (length <= 160) {
+      setSmsCount(1);
+    } else {
+      // For concatenated SMS, each part can only hold 153 characters
+      // due to the need for header information
+      setSmsCount(Math.ceil(length / 153));
     }
   };
-
-  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+  
+  // Handle form submission for single SMS
+  const onSubmit = async (data: MessageFormValues) => {
+    try {
+      setIsSubmitting(true);
       
-      // Simple validation for CSV
-      if (file.type !== "text/csv" && !file.name.endsWith('.csv')) {
-        toast.error("Please upload a valid CSV file");
-        return;
-      }
+      console.log("Sending message with data:", data);
       
-      // Read file to count recipients
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target && event.target.result) {
-          const content = event.target.result as string;
-          const lines = content.split('\n').filter(line => line.trim());
-          
-          setFormData({
-            ...formData,
-            csvFile: file,
-            recipientCount: lines.length
-          });
-          
-          toast.success(`CSV file loaded with ${lines.length} recipient(s)`);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    // Validate before submitting
-    if (bulkMode && !formData.csvFile) {
-      toast.error("Please upload a CSV file for bulk messaging");
-      setLoading(false);
-      return;
-    }
-
-    if (!bulkMode && !formData.recipients) {
-      toast.error("Please enter at least one recipient");
-      setLoading(false);
-      return;
-    }
-
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success(
-        bulkMode 
-          ? `Bulk ${messageType === "sms" ? "SMS" : messageType === "voice" ? "voice calls" : "audio messages"} initiated for ${formData.recipientCount} recipients!`
-          : messageType === "sms"
-            ? "SMS message sent successfully!"
-            : messageType === "voice"
-              ? "Voice call initiated successfully!"
-              : "Audio message sent successfully!"
+      // Format the recipients as comma-separated list for the API
+      const recipients = data.recipients.split(',').map(r => r.trim()).join(',');
+      
+      // Call the API service to send the SMS
+      const response = await apiService.sendSMS(
+        recipients,
+        data.message,
+        data.senderId,
+        data.schedule && data.scheduledDate ? format(data.scheduledDate, "yyyy-MM-dd HH:mm") : undefined
       );
       
-      // Reset form
-      setFormData({
-        recipients: "",
-        message: "",
-        senderId: "",
-        audioFile: null,
-        csvFile: null,
-        recipientCount: 0,
+      // Check if the API response indicates an error
+      if ("error" in response) {
+        throw new Error(response.error);
+      }
+      
+      // Show success toast
+      toast({
+        title: "Message sent successfully",
+        description: `Sent to ${recipients.split(',').length} recipient(s)`,
       });
       
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      if (csvInputRef.current) csvInputRef.current.value = "";
-      setScheduledMessage(false);
-      setScheduledDate("");
-    }, 1500);
+      // Reset the form
+      form.reset();
+    } catch (error) {
+      console.error("Error sending message:", error);
+      
+      // Show error toast
+      toast({
+        variant: "destructive",
+        title: "Failed to send message",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Handle form submission for bulk SMS
+  const onBulkSubmit = async (data: BulkMessageFormValues) => {
+    try {
+      setIsSubmitting(true);
+      
+      console.log("Sending bulk message with data:", data);
+      
+      // Get the CSV file
+      const csvFile = data.csvFile?.[0];
+      
+      if (!csvFile) {
+        throw new Error("Please upload a CSV file");
+      }
+      
+      // Call the API service to send the bulk SMS
+      const response = await apiService.sendBulkSMS(
+        csvFile,
+        data.message,
+        data.senderId,
+        data.schedule && data.scheduledDate ? format(data.scheduledDate, "yyyy-MM-dd HH:mm") : undefined
+      );
+      
+      // Check if the API response indicates an error
+      if ("error" in response) {
+        throw new Error(response.error);
+      }
+      
+      // Show success toast
+      toast({
+        title: "Bulk message sent successfully",
+        description: "Your message is being processed for delivery",
+      });
+      
+      // Reset the form
+      bulkForm.reset();
+    } catch (error) {
+      console.error("Error sending bulk message:", error);
+      
+      // Show error toast
+      toast({
+        variant: "destructive",
+        title: "Failed to send bulk message",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle"
-    >
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-          Send Message
-        </h2>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Bulk Mode</span>
-          <Switch 
-            checked={bulkMode} 
-            onCheckedChange={setBulkMode} 
-            aria-label="Toggle bulk mode"
-          />
-        </div>
-      </div>
-
-      <Tabs defaultValue="sms" onValueChange={(value) => setMessageType(value)}>
-        <TabsList className="grid grid-cols-3 mb-6">
-          <TabsTrigger value="sms">SMS</TabsTrigger>
-          <TabsTrigger value="voice">Voice Call</TabsTrigger>
-          <TabsTrigger value="audio">Audio Message</TabsTrigger>
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-subtle p-6">
+      <Tabs defaultValue="single" onValueChange={setSelectedTab}>
+        <TabsList className="grid grid-cols-2 mb-6">
+          <TabsTrigger value="single">Single SMS</TabsTrigger>
+          <TabsTrigger value="bulk">Bulk SMS</TabsTrigger>
         </TabsList>
-
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-6">
-            {bulkMode ? (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Bulk Recipients</CardTitle>
-                  <CardDescription>
-                    Upload a CSV file with phone numbers
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="mt-1 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
-                    <div className="space-y-2 text-center">
-                      <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="flex text-sm text-gray-600 dark:text-gray-400">
-                        <label
-                          htmlFor="csvFile"
-                          className="relative cursor-pointer rounded-md font-medium text-jaylink-600 hover:text-jaylink-700"
-                        >
-                          <span>Upload CSV file</span>
-                          <Input
-                            id="csvFile"
-                            name="csvFile"
-                            type="file"
-                            accept=".csv"
-                            ref={csvInputRef}
-                            onChange={handleCsvUpload}
-                            className="sr-only"
-                          />
-                        </label>
-                        <p className="pl-1">or drag and drop</p>
-                      </div>
-                      <p className="text-xs text-gray-500">CSV format with one phone number per line</p>
-                    </div>
-                  </div>
-                  {formData.csvFile && (
-                    <div className="mt-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        File: {formData.csvFile.name}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Recipients: {formData.recipientCount}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <div>
-                <Label htmlFor="recipients">Recipients</Label>
-                <Input
-                  id="recipients"
-                  name="recipients"
-                  placeholder="Enter phone numbers separated by commas"
-                  value={formData.recipients}
-                  onChange={handleInputChange}
-                  required={!bulkMode}
-                  className="mt-1"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Format: +234800123456, +234800123457
-                </p>
-              </div>
-            )}
-
-            <div>
-              <Label htmlFor="senderId">Sender ID</Label>
-              <Select
-                value={formData.senderId}
-                onValueChange={(value) => handleSelectChange("senderId", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select sender ID" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="JayLink">JayLink</SelectItem>
-                  <SelectItem value="SMS">SMS</SelectItem>
-                  <SelectItem value="INFO">INFO</SelectItem>
-                  <SelectItem value="ALERT">ALERT</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <TabsContent value="sms" className="mt-0">
-              <div>
-                <Label htmlFor="message">Message</Label>
-                <Textarea
-                  id="message"
-                  name="message"
-                  placeholder="Type your message here"
-                  rows={4}
-                  value={formData.message}
-                  onChange={handleInputChange}
-                  required
-                  className="mt-1"
-                />
-                <div className="flex justify-between mt-1">
-                  <p className="text-xs text-gray-500">
-                    Character count: {formData.message.length} | Messages: {Math.ceil(formData.message.length / 160)}
-                  </p>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center cursor-pointer">
-                          <HelpCircle size={14} className="text-gray-400" />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">160 characters per SMS</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="voice" className="mt-0">
-              <div>
-                <Label htmlFor="message">Voice Message (Text-to-Speech)</Label>
-                <Textarea
-                  id="message"
-                  name="message"
-                  placeholder="Type your message to be converted to speech"
-                  rows={4}
-                  value={formData.message}
-                  onChange={handleInputChange}
-                  required
-                  className="mt-1"
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="audio" className="mt-0">
-              <div>
-                <Label htmlFor="audioFile">Upload Audio File</Label>
-                <div className="mt-1 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
-                  <div className="space-y-2 text-center">
-                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="flex text-sm text-gray-600 dark:text-gray-400">
-                      <label
-                        htmlFor="audioFile"
-                        className="relative cursor-pointer rounded-md font-medium text-jaylink-600 hover:text-jaylink-700"
-                      >
-                        <span>Upload an audio file</span>
-                        <Input
-                          id="audioFile"
-                          name="audioFile"
-                          type="file"
-                          accept="audio/*"
-                          ref={fileInputRef}
-                          onChange={handleFileChange}
-                          className="sr-only"
-                        />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    <p className="text-xs text-gray-500">MP3, WAV up to 10MB</p>
-                  </div>
-                </div>
-                {formData.audioFile && (
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    File: {formData.audioFile.name}
-                  </p>
+        
+        <TabsContent value="single">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="recipients"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Recipients</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="2348030000000, 2348020000000" 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Enter phone numbers separated by commas
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
-            </TabsContent>
-
-            <div className="flex items-center space-x-2">
-              <Switch 
-                id="scheduledMessage"
-                checked={scheduledMessage} 
-                onCheckedChange={setScheduledMessage}
               />
-              <Label htmlFor="scheduledMessage" className="cursor-pointer">Schedule for later</Label>
-            </div>
-
-            {scheduledMessage && (
-              <div>
-                <Label htmlFor="scheduledDate">Schedule Date & Time</Label>
-                <div className="flex items-center">
-                  <Input
-                    id="scheduledDate"
-                    name="scheduledDate"
-                    type="datetime-local"
-                    min={new Date().toISOString().slice(0, 16)}
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    required={scheduledMessage}
-                    className="mt-1"
-                  />
-                  <Calendar className="ml-2 text-gray-400" size={20} />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Messages will be sent at the scheduled time
-                </p>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full bg-jaylink-600 hover:bg-jaylink-700 flex items-center justify-center"
-              disabled={loading}
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
+              
+              <FormField
+                control={form.control}
+                name="senderId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sender ID</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Your Brand Name or ID (Max 11 characters)" 
+                        {...field} 
+                        maxLength={11}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      This will appear as the sender of the message (max 11 characters)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Message</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Type your message here" 
+                        className="min-h-[120px]" 
+                        {...field} 
+                        onChange={(e) => {
+                          field.onChange(e);
+                          calculateSMSCount(e.target.value);
+                        }}
+                      />
+                    </FormControl>
+                    <div className="flex justify-between items-center mt-2">
+                      <FormDescription>
+                        {characterCount} characters | {smsCount} SMS
+                      </FormDescription>
+                      {smsCount > 3 && (
+                        <FormDescription className="text-amber-500">
+                          Long message (6 SMS max)
+                        </FormDescription>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="schedule"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Schedule message</FormLabel>
+                      <FormDescription>
+                        Send this message at a later time
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              {form.watch("schedule") && (
+                <FormField
+                  control={form.control}
+                  name="scheduledDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Scheduled date</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP HH:mm")
+                              ) : (
+                                <span>Pick a date and time</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date < new Date()
+                            }
+                            initialFocus
+                          />
+                          <div className="p-3 border-t border-border">
+                            <Input
+                              type="time"
+                              onChange={(e) => {
+                                const [hours, minutes] = e.target.value.split(':');
+                                const newDate = field.value ? new Date(field.value) : new Date();
+                                newDate.setHours(parseInt(hours, 10));
+                                newDate.setMinutes(parseInt(minutes, 10));
+                                field.onChange(newDate);
+                              }}
+                              value={field.value ? format(field.value, "HH:mm") : ''}
+                            />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <FormDescription>
+                        Your message will be sent at this time
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-              {bulkMode ? `Send Bulk ${messageType.toUpperCase()}` : 
-                messageType === "sms"
-                  ? "Send SMS"
-                  : messageType === "voice"
-                    ? "Start Voice Call"
-                    : "Send Audio Message"}
-            </Button>
-          </div>
-        </form>
+              
+              <Button 
+                type="submit" 
+                className="w-full bg-jaylink-600 hover:bg-jaylink-700"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Sending..." : "Send Message"}
+              </Button>
+            </form>
+          </Form>
+        </TabsContent>
+        
+        <TabsContent value="bulk">
+          <Form {...bulkForm}>
+            <form onSubmit={bulkForm.handleSubmit(onBulkSubmit)} className="space-y-6">
+              <FormField
+                control={bulkForm.control}
+                name="csvFile"
+                render={({ field: { value, onChange, ...fieldProps } }) => (
+                  <FormItem>
+                    <FormLabel>Upload contacts (CSV)</FormLabel>
+                    <FormControl>
+                      <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                        <Input
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
+                          id="csv-file"
+                          onChange={(event) => {
+                            onChange(event.target.files);
+                          }}
+                          {...fieldProps}
+                        />
+                        <label htmlFor="csv-file" className="cursor-pointer w-full flex flex-col items-center gap-2">
+                          <Upload className="h-8 w-8 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            {value && value.length > 0 ? value[0].name : 'Click to upload CSV file'}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            CSV file with a column for phone numbers
+                          </span>
+                        </label>
+                      </div>
+                    </FormControl>
+                    <FormDescription>
+                      <a 
+                        href="/sample-contacts.csv" 
+                        className="text-jaylink-600 hover:text-jaylink-700"
+                        download
+                      >
+                        Download sample CSV template
+                      </a>
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bulkForm.control}
+                name="senderId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sender ID</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="Your Brand Name or ID (Max 11 characters)" 
+                        {...field} 
+                        maxLength={11}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      This will appear as the sender of the message (max 11 characters)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bulkForm.control}
+                name="message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Message</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Type your message here" 
+                        className="min-h-[120px]" 
+                        {...field} 
+                        onChange={(e) => {
+                          field.onChange(e);
+                          calculateSMSCount(e.target.value);
+                        }}
+                      />
+                    </FormControl>
+                    <div className="flex justify-between items-center mt-2">
+                      <FormDescription>
+                        {characterCount} characters | {smsCount} SMS
+                      </FormDescription>
+                      {smsCount > 3 && (
+                        <FormDescription className="text-amber-500">
+                          Long message (6 SMS max)
+                        </FormDescription>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={bulkForm.control}
+                name="schedule"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Schedule message</FormLabel>
+                      <FormDescription>
+                        Send this message at a later time
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              {bulkForm.watch("schedule") && (
+                <FormField
+                  control={bulkForm.control}
+                  name="scheduledDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Scheduled date</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP HH:mm")
+                              ) : (
+                                <span>Pick a date and time</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date < new Date()
+                            }
+                            initialFocus
+                          />
+                          <div className="p-3 border-t border-border">
+                            <Input
+                              type="time"
+                              onChange={(e) => {
+                                const [hours, minutes] = e.target.value.split(':');
+                                const newDate = field.value ? new Date(field.value) : new Date();
+                                newDate.setHours(parseInt(hours, 10));
+                                newDate.setMinutes(parseInt(minutes, 10));
+                                field.onChange(newDate);
+                              }}
+                              value={field.value ? format(field.value, "HH:mm") : ''}
+                            />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <FormDescription>
+                        Your message will be sent at this time
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              
+              <Button 
+                type="submit" 
+                className="w-full bg-jaylink-600 hover:bg-jaylink-700"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Sending..." : "Send Bulk Message"}
+              </Button>
+            </form>
+          </Form>
+        </TabsContent>
       </Tabs>
-    </motion.div>
+    </div>
   );
 };
 

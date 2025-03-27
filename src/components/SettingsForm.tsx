@@ -1,472 +1,473 @@
 
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { toast } from "sonner";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  Shield, 
-  Bell, 
-  CreditCard, 
-  Key, 
-  Smartphone, 
-  Eye, 
-  EyeOff, 
-  Loader2, 
-  Save,
-  AlertTriangle
-} from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { useState } from "react";
+
+// Define form schema for profile settings
+const profileFormSchema = z.object({
+  firstName: z.string().min(1, { message: "First name is required" }),
+  lastName: z.string().min(1, { message: "Last name is required" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  company: z.string().optional(),
+  phone: z.string().min(10, { message: "Please enter a valid phone number" }),
+});
+
+// Define form schema for notification settings
+const notificationFormSchema = z.object({
+  emailAlerts: z.boolean().default(true),
+  lowBalanceAlerts: z.boolean().default(true),
+  deliveryReports: z.boolean().default(true),
+  marketingEmails: z.boolean().default(false),
+});
+
+// Define form schema for security settings
+const securityFormSchema = z.object({
+  currentPassword: z.string().min(1, { message: "Current password is required" }),
+  newPassword: z.string().min(8, { message: "Password must be at least 8 characters" }),
+  confirmPassword: z.string().min(8, { message: "Please confirm your new password" }),
+  twoFactorAuth: z.boolean().default(false),
+});
+
+type ProfileFormValues = z.infer<typeof profileFormSchema>;
+type NotificationFormValues = z.infer<typeof notificationFormSchema>;
+type SecurityFormValues = z.infer<typeof securityFormSchema>;
 
 const SettingsForm = () => {
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "john@example.com",
-    phone: "+234 800 123 4567",
-    company: "Acme Inc",
-    address: "123 Main Street, Lagos, Nigeria",
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  // Initialize forms with default values
+  const profileForm = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileFormSchema),
+    defaultValues: {
+      firstName: "John",
+      lastName: "Doe",
+      email: "john.doe@example.com",
+      company: "Example Corp",
+      phone: "2348012345678",
+    },
   });
   
-  const [securityForm, setSecurityForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
+  const notificationForm = useForm<NotificationFormValues>({
+    resolver: zodResolver(notificationFormSchema),
+    defaultValues: {
+      emailAlerts: true,
+      lowBalanceAlerts: true,
+      deliveryReports: true,
+      marketingEmails: false,
+    },
   });
-
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailSummary: true,
-    smsAlerts: true,
-    failedDelivery: true,
-    balanceLow: true,
-    marketing: false,
+  
+  const securityForm = useForm<SecurityFormValues>({
+    resolver: zodResolver(securityFormSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+      twoFactorAuth: false,
+    },
   });
-
-  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setProfileForm({
-      ...profileForm,
-      [name]: value,
-    });
-  };
-
-  const handleSecurityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setSecurityForm({
-      ...securityForm,
-      [name]: value,
-    });
-  };
-
-  const handleToggleChange = (value: boolean, name: string) => {
-    setNotificationSettings({
-      ...notificationSettings,
-      [name]: value,
-    });
-  };
-
-  const handleProfileSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Profile settings updated successfully!");
-    }, 1500);
-  };
-
-  const handleSecuritySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (securityForm.newPassword !== securityForm.confirmPassword) {
-      toast.error("New passwords do not match!");
-      return;
+  
+  // Handle profile form submission
+  const onProfileSubmit = async (data: ProfileFormValues) => {
+    try {
+      setIsUpdating(true);
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log("Updating profile:", data);
+      
+      toast({
+        title: "Profile updated",
+        description: "Your profile information has been updated successfully",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update profile",
+        description: "There was a problem updating your profile",
+      });
+    } finally {
+      setIsUpdating(false);
     }
-    
-    setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      setSecurityForm({
+  };
+  
+  // Handle notification form submission
+  const onNotificationSubmit = async (data: NotificationFormValues) => {
+    try {
+      setIsUpdating(true);
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log("Updating notification settings:", data);
+      
+      toast({
+        title: "Notification settings updated",
+        description: "Your notification preferences have been saved",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update notifications",
+        description: "There was a problem updating your notification settings",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+  
+  // Handle security form submission
+  const onSecuritySubmit = async (data: SecurityFormValues) => {
+    try {
+      setIsUpdating(true);
+      
+      // Basic validation for password match
+      if (data.newPassword !== data.confirmPassword) {
+        throw new Error("New password and confirmation do not match");
+      }
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log("Updating security settings:", data);
+      
+      toast({
+        title: "Security settings updated",
+        description: data.twoFactorAuth 
+          ? "Your password has been updated and email 2FA has been enabled" 
+          : "Your password has been updated",
+      });
+      
+      // Reset password fields
+      securityForm.reset({
+        ...data,
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       });
-      toast.success("Password changed successfully!");
-    }, 1500);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update security settings",
+        description: error instanceof Error ? error.message : "There was a problem updating your security settings",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
   };
-
-  const handleNotificationSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Notification settings updated!");
-    }, 1500);
-  };
-
+  
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-    >
-      <Tabs defaultValue="profile">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Settings</CardTitle>
-              <CardDescription>
-                Manage your personal information and preferences
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleProfileSubmit} className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                        <Input
-                          id="firstName"
-                          name="firstName"
-                          placeholder="Your first name"
-                          className="pl-10"
-                          value={profileForm.firstName}
-                          onChange={handleProfileChange}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                        <Input
-                          id="lastName"
-                          name="lastName"
-                          placeholder="Your last name"
-                          className="pl-10"
-                          value={profileForm.lastName}
-                          onChange={handleProfileChange}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="Your email address"
-                        className="pl-10"
-                        value={profileForm.email}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                      <Input
-                        id="phone"
-                        name="phone"
-                        placeholder="Your phone number"
-                        className="pl-10"
-                        value={profileForm.phone}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company (Optional)</Label>
-                    <Input
-                      id="company"
-                      name="company"
-                      placeholder="Your company name"
-                      value={profileForm.company}
-                      onChange={handleProfileChange}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                      id="address"
-                      name="address"
-                      placeholder="Your address"
-                      rows={3}
-                      value={profileForm.address}
-                      onChange={handleProfileChange}
-                    />
-                  </div>
-                </div>
-                
-                <Button 
-                  type="submit" 
-                  className="w-full bg-jaylink-600 hover:bg-jaylink-700"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving changes...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
+    <Tabs defaultValue="profile" className="space-y-6">
+      <TabsList className="grid grid-cols-3 w-full md:w-auto">
+        <TabsTrigger value="profile">Profile</TabsTrigger>
+        <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        <TabsTrigger value="security">Security</TabsTrigger>
+      </TabsList>
+      
+      {/* Profile Settings */}
+      <TabsContent value="profile" className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">
+            Personal Information
+          </h3>
+          
+          <Form {...profileForm}>
+            <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={profileForm.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="security">
-          <Card>
-            <CardHeader>
-              <CardTitle>Security Settings</CardTitle>
-              <CardDescription>
-                Update your password and manage security preferences
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSecuritySubmit} className="space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="currentPassword">Current Password</Label>
-                    <div className="relative">
-                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                      <Input
-                        id="currentPassword"
-                        name="currentPassword"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Your current password"
-                        className="pl-10 pr-10"
-                        value={securityForm.currentPassword}
-                        onChange={handleSecurityChange}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4 text-gray-500" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-gray-500" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
-                    <div className="relative">
-                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                      <Input
-                        id="newPassword"
-                        name="newPassword"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Your new password"
-                        className="pl-10"
-                        value={securityForm.newPassword}
-                        onChange={handleSecurityChange}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Password must be at least 8 characters, including a number and a special character.
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                    <div className="relative">
-                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-                      <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Confirm your new password"
-                        className="pl-10"
-                        value={securityForm.confirmPassword}
-                        onChange={handleSecurityChange}
-                      />
-                    </div>
-                    {securityForm.newPassword && securityForm.confirmPassword && 
-                     securityForm.newPassword !== securityForm.confirmPassword && (
-                      <p className="text-xs text-red-500 flex items-center pt-1">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
-                        Passwords do not match
-                      </p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2 pt-4">
-                    <h3 className="text-lg font-medium">Two-Factor Authentication</h3>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Enable 2FA via SMS</p>
-                        <p className="text-sm text-gray-500">
-                          Secure your account with SMS verification
-                        </p>
-                      </div>
-                      <Switch id="enable-2fa" />
-                    </div>
-                  </div>
-                </div>
+                />
                 
-                <Button 
-                  type="submit" 
-                  className="w-full bg-jaylink-600 hover:bg-jaylink-700"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Updating password...
-                    </>
-                  ) : (
-                    "Update Password"
+                <FormField
+                  control={profileForm.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
-              <CardDescription>
-                Manage how you receive alerts and notifications
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleNotificationSubmit} className="space-y-6">
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
+                />
+              </div>
+              
+              <FormField
+                control={profileForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="email" />
+                    </FormControl>
+                    <FormDescription>
+                      We'll use this for communication and account recovery
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={profileForm.control}
+                name="company"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Company (Optional)</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={profileForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <Button 
+                type="submit" 
+                className="bg-jaylink-600 hover:bg-jaylink-700"
+                disabled={isUpdating}
+              >
+                {isUpdating ? "Updating..." : "Update Profile"}
+              </Button>
+            </form>
+          </Form>
+        </div>
+      </TabsContent>
+      
+      {/* Notification Settings */}
+      <TabsContent value="notifications" className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">
+            Email Notification Preferences
+          </h3>
+          
+          <Form {...notificationForm}>
+            <form onSubmit={notificationForm.handleSubmit(onNotificationSubmit)} className="space-y-6">
+              <FormField
+                control={notificationForm.control}
+                name="emailAlerts"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <Label className="text-base">Email Summary</Label>
-                      <p className="text-sm text-gray-500">
-                        Receive daily summaries of your account activity
-                      </p>
+                      <FormLabel className="text-base">Email Alerts</FormLabel>
+                      <FormDescription>
+                        Receive email notifications for important events
+                      </FormDescription>
                     </div>
-                    <Switch 
-                      id="email-summary"
-                      checked={notificationSettings.emailSummary}
-                      onCheckedChange={(value) => handleToggleChange(value, "emailSummary")}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={notificationForm.control}
+                name="lowBalanceAlerts"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <Label className="text-base">SMS Alerts</Label>
-                      <p className="text-sm text-gray-500">
-                        Get SMS notifications for important events
-                      </p>
+                      <FormLabel className="text-base">Low Balance Alerts</FormLabel>
+                      <FormDescription>
+                        Receive alerts when your account balance is low
+                      </FormDescription>
                     </div>
-                    <Switch 
-                      id="sms-alerts"
-                      checked={notificationSettings.smsAlerts}
-                      onCheckedChange={(value) => handleToggleChange(value, "smsAlerts")}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={notificationForm.control}
+                name="deliveryReports"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <Label className="text-base">Failed Delivery Alerts</Label>
-                      <p className="text-sm text-gray-500">
-                        Be notified when message delivery fails
-                      </p>
+                      <FormLabel className="text-base">Delivery Reports</FormLabel>
+                      <FormDescription>
+                        Receive email reports for message delivery status
+                      </FormDescription>
                     </div>
-                    <Switch 
-                      id="failed-delivery"
-                      checked={notificationSettings.failedDelivery}
-                      onCheckedChange={(value) => handleToggleChange(value, "failedDelivery")}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={notificationForm.control}
+                name="marketingEmails"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <Label className="text-base">Low Balance Alerts</Label>
-                      <p className="text-sm text-gray-500">
-                        Receive notifications when your balance is low
-                      </p>
+                      <FormLabel className="text-base">Marketing Emails</FormLabel>
+                      <FormDescription>
+                        Receive updates about new features and promotions
+                      </FormDescription>
                     </div>
-                    <Switch 
-                      id="balance-low"
-                      checked={notificationSettings.balanceLow}
-                      onCheckedChange={(value) => handleToggleChange(value, "balanceLow")}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <Button 
+                type="submit" 
+                className="bg-jaylink-600 hover:bg-jaylink-700"
+                disabled={isUpdating}
+              >
+                {isUpdating ? "Saving..." : "Save Preferences"}
+              </Button>
+            </form>
+          </Form>
+        </div>
+      </TabsContent>
+      
+      {/* Security Settings */}
+      <TabsContent value="security" className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">
+            Password & Security
+          </h3>
+          
+          <Form {...securityForm}>
+            <form onSubmit={securityForm.handleSubmit(onSecuritySubmit)} className="space-y-6">
+              <FormField
+                control={securityForm.control}
+                name="currentPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Current Password</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={securityForm.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Password</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="password" />
+                    </FormControl>
+                    <FormDescription>
+                      Password must be at least 8 characters
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={securityForm.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm New Password</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={securityForm.control}
+                name="twoFactorAuth"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                     <div className="space-y-0.5">
-                      <Label className="text-base">Marketing Communications</Label>
-                      <p className="text-sm text-gray-500">
-                        Receive updates about new features and special offers
-                      </p>
+                      <FormLabel className="text-base">Email Two-Factor Authentication</FormLabel>
+                      <FormDescription>
+                        Add an extra layer of security with email verification
+                      </FormDescription>
                     </div>
-                    <Switch 
-                      id="marketing"
-                      checked={notificationSettings.marketing}
-                      onCheckedChange={(value) => handleToggleChange(value, "marketing")}
-                    />
-                  </div>
-                </div>
-                
-                <Button 
-                  type="submit" 
-                  className="w-full bg-jaylink-600 hover:bg-jaylink-700"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving preferences...
-                    </>
-                  ) : (
-                    "Save Notification Preferences"
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </motion.div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <Button 
+                type="submit" 
+                className="bg-jaylink-600 hover:bg-jaylink-700"
+                disabled={isUpdating}
+              >
+                {isUpdating ? "Updating..." : "Update Security Settings"}
+              </Button>
+            </form>
+          </Form>
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 };
 

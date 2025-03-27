@@ -8,10 +8,11 @@ import { AnimatePresence } from "framer-motion";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import SendSMS from "./pages/SendSMS";
+import AudioMessage from "./pages/AudioMessage";
 import VoiceCalls from "./pages/VoiceCalls";
-import UploadAudio from "./pages/UploadAudio";
 import Analytics from "./pages/Analytics";
 import Balance from "./pages/Balance";
 import Groups from "./pages/Groups";
@@ -32,10 +33,11 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/send-sms" element={<SendSMS />} />
+            <Route path="/audio-message" element={<AudioMessage />} />
             <Route path="/voice-calls" element={<VoiceCalls />} />
-            <Route path="/upload-audio" element={<UploadAudio />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/balance" element={<Balance />} />
             <Route path="/groups" element={<Groups />} />

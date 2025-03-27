@@ -1,362 +1,529 @@
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import {
-  MessageSquare,
-  Phone,
-  Upload,
-  Settings,
-  LogOut,
-  User,
-  Home,
-  BarChart3,
-  Wallet,
-  LayoutDashboard,
-  ArrowLeft,
-  Users,
-  Plus,
-  Search,
-  MoreHorizontal,
-  Loader2,
-} from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/hooks/use-toast";
+import { Upload, MoreVertical, Users, Send, Edit, Trash2, Download } from "lucide-react";
+import { motion } from "framer-motion";
 
-// Mock data for groups and contacts
+// Define schemas
+const newGroupSchema = z.object({
+  name: z.string().min(2, { message: "Group name must be at least 2 characters" }),
+  description: z.string().optional(),
+  numbers: z.string().min(1, { message: "Please enter at least one phone number" }),
+});
+
+const csvUploadSchema = z.object({
+  name: z.string().min(2, { message: "Group name must be at least 2 characters" }),
+  description: z.string().optional(),
+  csvFile: z.instanceof(FileList).refine((files) => files.length > 0, {
+    message: "Please upload a CSV file",
+  }),
+});
+
+type NewGroupFormValues = z.infer<typeof newGroupSchema>;
+type CsvUploadFormValues = z.infer<typeof csvUploadSchema>;
+
+// Mock data for contact groups
 const mockGroups = [
-  { id: 1, name: "Customers", count: 248, description: "All customer contacts" },
-  { id: 2, name: "Team Members", count: 12, description: "Internal staff contacts" },
-  { id: 3, name: "Vendors", count: 45, description: "Supplier and vendor contacts" },
-  { id: 4, name: "Partners", count: 30, description: "Business partner contacts" },
-  { id: 5, name: "Marketing", count: 150, description: "Marketing campaign contacts" },
-];
-
-const mockContacts = [
-  { id: 1, name: "John Doe", phone: "+2348012345678", email: "john@example.com", group: "Customers" },
-  { id: 2, name: "Jane Smith", phone: "+2348023456789", email: "jane@example.com", group: "Customers" },
-  { id: 3, name: "Sam Wilson", phone: "+2347034567890", email: "sam@example.com", group: "Team Members" },
-  { id: 4, name: "Mary Johnson", phone: "+2349045678901", email: "mary@example.com", group: "Vendors" },
-  { id: 5, name: "David Brown", phone: "+2348056789012", email: "david@example.com", group: "Partners" },
+  {
+    id: "1",
+    name: "Customers",
+    description: "All active customers",
+    count: 156,
+    createdAt: "2023-05-12",
+  },
+  {
+    id: "2",
+    name: "Employees",
+    description: "Company staff",
+    count: 34,
+    createdAt: "2023-05-10",
+  },
+  {
+    id: "3",
+    name: "Partners",
+    description: "Business partners and vendors",
+    count: 27,
+    createdAt: "2023-05-08",
+  },
+  {
+    id: "4",
+    name: "Newsletter Subscribers",
+    description: "Newsletter subscription list",
+    count: 892,
+    createdAt: "2023-05-06",
+  },
 ];
 
 const Groups = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
-  
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("groups");
 
-  const sidebarLinks = [
-    { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
-    { name: "Send SMS", icon: <MessageSquare size={20} />, path: "/send-sms" },
-    { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
-    { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
-    { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
-    { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
-    { name: "Groups", icon: <Users size={20} />, path: "/groups" },
-    { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
-  ];
+  const [groups, setGroups] = useState(mockGroups);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openDialog, setOpenDialog] = useState<"new" | "upload" | null>(null);
 
-  const filteredGroups = mockGroups.filter(group => 
-    group.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Forms
+  const newGroupForm = useForm<NewGroupFormValues>({
+    resolver: zodResolver(newGroupSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      numbers: "",
+    },
+  });
 
-  const filteredContacts = mockContacts.filter(contact => 
-    contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contact.phone.includes(searchTerm) ||
-    contact.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const csvUploadForm = useForm<CsvUploadFormValues>({
+    resolver: zodResolver(csvUploadSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+    },
+  });
 
-  const handleCreateGroup = () => {
-    toast.success("This feature would create a new contact group");
+  // Handle new group form submission
+  const onSubmitNewGroup = async (data: NewGroupFormValues) => {
+    try {
+      setIsSubmitting(true);
+      console.log("Creating new group:", data);
+      
+      // Mock API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Count the number of phone numbers (separated by commas, newlines or spaces)
+      const count = data.numbers.split(/[,\n\s]+/).filter(n => n.trim()).length;
+      
+      // Add new group to the list
+      const newGroup = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: data.name,
+        description: data.description || "",
+        count,
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+      
+      setGroups([newGroup, ...groups]);
+      
+      toast({
+        title: "Group created",
+        description: `${data.name} has been created with ${count} contacts`,
+      });
+      
+      newGroupForm.reset();
+      setOpenDialog(null);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to create group",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleImportContacts = () => {
-    toast.success("This feature would import contacts from CSV");
+  // Handle CSV upload form submission
+  const onSubmitCSVUpload = async (data: CsvUploadFormValues) => {
+    try {
+      setIsSubmitting(true);
+      console.log("Uploading CSV:", data);
+      
+      // Mock API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Add new group to the list with random count (in a real app, this would be the actual count from the CSV)
+      const newGroup = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: data.name,
+        description: data.description || "",
+        count: Math.floor(Math.random() * 100) + 50, // Random count for demo
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+      
+      setGroups([newGroup, ...groups]);
+      
+      toast({
+        title: "Group created from CSV",
+        description: `${data.name} has been created with ${newGroup.count} contacts`,
+      });
+      
+      csvUploadForm.reset();
+      setOpenDialog(null);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to upload CSV",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle group deletion
+  const deleteGroup = (id: string) => {
+    const groupToDelete = groups.find(group => group.id === id);
+    if (groupToDelete) {
+      setGroups(groups.filter(group => group.id !== id));
+      toast({
+        title: "Group deleted",
+        description: `${groupToDelete.name} has been deleted`,
+      });
+    }
+  };
+
+  // Handler for "Send SMS to Group" action
+  const sendSMSToGroup = (groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (group) {
+      console.log(`Sending SMS to group: ${group.name}`);
+      // Navigate to send SMS page with this group pre-selected
+      window.location.href = `/send-sms?group=${groupId}`;
+    }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Sidebar */}
-      <motion.aside
-        initial={{ x: -100, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
+    <DashboardLayout title="Contact Groups" backLink="/dashboard">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
+        className="space-y-6"
       >
-        <div className="p-6">
-          <Link to="/" className="flex items-center space-x-2">
-            <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
-              Jay<span className="text-jaylink-600">Link</span>
-            </span>
-          </Link>
-        </div>
-
-        <nav className="flex-1 px-3 py-4">
-          <ul className="space-y-1">
-            {sidebarLinks.map((link) => (
-              <li key={link.name}>
-                <Link
-                  to={link.path}
-                  className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
-                    link.path === "/groups"
-                      ? "bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300"
-                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  <span className={`mr-3 ${
-                    link.path === "/groups"
-                      ? "text-jaylink-600 dark:text-jaylink-400"
-                      : "text-gray-500 dark:text-gray-400"
-                  }`}>
-                    {link.icon}
-                  </span>
-                  <span className="font-medium">{link.name}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center">
-            <div className="w-10 h-10 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600">
-              <User size={20} />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                John Doe
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                john@example.com
-              </p>
-            </div>
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              Contact Groups
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Organize and manage your contacts for bulk messaging
+            </p>
           </div>
-          <Button
-            variant="outline"
-            className="w-full mt-4 border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center"
-          >
-            <LogOut size={16} className="mr-2" />
-            Sign out
-          </Button>
-        </div>
-      </motion.aside>
-
-      {/* Main content */}
-      <div className="flex-1 md:ml-64">
-        {/* Top navbar */}
-        <motion.header
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10"
-        >
-          <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center">
-              <Button variant="ghost" size="icon" className="md:hidden mr-2">
-                <Users size={20} />
-              </Button>
-              <Link to="/dashboard" className="inline-flex items-center text-gray-500 hover:text-gray-700 mr-4">
-                <ArrowLeft size={18} />
-              </Link>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Groups & Contacts
-              </h1>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Link to="/">
-                <Button variant="ghost" size="icon">
-                  <Home size={20} />
+          
+          <div className="flex gap-3">
+            <Dialog open={openDialog === "upload"} onOpenChange={(open) => setOpenDialog(open ? "upload" : null)}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  <span>Upload CSV</span>
                 </Button>
-              </Link>
-              <Button variant="ghost" size="icon">
-                <Settings size={20} />
-              </Button>
-              <div className="w-8 h-8 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600 md:hidden">
-                <User size={16} />
-              </div>
-            </div>
-          </div>
-        </motion.header>
-
-        {/* Page content */}
-        <main className="p-4 sm:p-6 md:p-8">
-          <div className="max-w-6xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <div className="w-full md:w-1/2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                    <Input
-                      type="text"
-                      placeholder={`Search ${activeTab === "groups" ? "groups" : "contacts"}...`}
-                      className="pl-10"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                  <Button 
-                    onClick={handleCreateGroup}
-                    className="bg-jaylink-600 hover:bg-jaylink-700"
-                  >
-                    <Plus size={16} className="mr-2" />
-                    New Group
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={handleImportContacts}
-                  >
-                    <Upload size={16} className="mr-2" />
-                    Import
-                  </Button>
-                </div>
-              </div>
-
-              <Tabs defaultValue="groups" onValueChange={setActiveTab}>
-                <TabsList className="mb-6">
-                  <TabsTrigger value="groups">Groups</TabsTrigger>
-                  <TabsTrigger value="contacts">Contacts</TabsTrigger>
-                </TabsList>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Import contacts from CSV</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file with contact numbers to create a new group
+                  </DialogDescription>
+                </DialogHeader>
                 
-                <TabsContent value="groups">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {loading ? (
-                      <div className="col-span-full flex justify-center p-8">
-                        <Loader2 className="animate-spin h-8 w-8 text-jaylink-600" />
-                      </div>
-                    ) : filteredGroups.length > 0 ? (
-                      filteredGroups.map(group => (
-                        <Card key={group.id} className="overflow-hidden">
-                          <CardHeader className="pb-3">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <CardTitle>{group.name}</CardTitle>
-                                <CardDescription>{group.count} contacts</CardDescription>
-                              </div>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal size={18} />
-                              </Button>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                              {group.description}
-                            </p>
-                            <div className="flex space-x-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="text-xs"
-                                onClick={() => toast.success(`Send SMS to ${group.name} group`)}
-                              >
-                                <MessageSquare size={14} className="mr-1" />
-                                SMS
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="text-xs"
-                                onClick={() => toast.success(`Voice call to ${group.name} group`)}
-                              >
-                                <Phone size={14} className="mr-1" />
-                                Call
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))
-                    ) : (
-                      <div className="col-span-full text-center p-8">
-                        <p className="text-gray-500 dark:text-gray-400">No groups found</p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="contacts">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle>All Contacts</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {loading ? (
-                        <div className="flex justify-center p-8">
-                          <Loader2 className="animate-spin h-8 w-8 text-jaylink-600" />
-                        </div>
-                      ) : filteredContacts.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse">
-                            <thead>
-                              <tr className="border-b border-gray-200 dark:border-gray-700">
-                                <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Name</th>
-                                <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Phone</th>
-                                <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Email</th>
-                                <th className="text-left py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Group</th>
-                                <th className="text-right py-3 px-4 font-medium text-gray-500 dark:text-gray-400">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredContacts.map(contact => (
-                                <tr key={contact.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
-                                  <td className="py-3 px-4">{contact.name}</td>
-                                  <td className="py-3 px-4 font-mono text-sm">{contact.phone}</td>
-                                  <td className="py-3 px-4">{contact.email}</td>
-                                  <td className="py-3 px-4">{contact.group}</td>
-                                  <td className="py-3 px-4 text-right">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8"
-                                      onClick={() => toast.success(`Send SMS to ${contact.name}`)}
-                                    >
-                                      <MessageSquare size={16} />
-                                    </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      className="h-8 w-8"
-                                      onClick={() => toast.success(`Call ${contact.name}`)}
-                                    >
-                                      <Phone size={16} />
-                                    </Button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="text-center p-8">
-                          <p className="text-gray-500 dark:text-gray-400">No contacts found</p>
-                        </div>
+                <Form {...csvUploadForm}>
+                  <form onSubmit={csvUploadForm.handleSubmit(onSubmitCSVUpload)} className="space-y-6 py-4">
+                    <FormField
+                      control={csvUploadForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Group Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., Customers" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
                       )}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-            </motion.div>
+                    />
+                    
+                    <FormField
+                      control={csvUploadForm.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Brief description of this group" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={csvUploadForm.control}
+                      name="csvFile"
+                      render={({ field: { value, onChange, ...fieldProps } }) => (
+                        <FormItem>
+                          <FormLabel>CSV File</FormLabel>
+                          <FormControl>
+                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                              <Input
+                                type="file"
+                                accept=".csv"
+                                className="hidden"
+                                id="contact-csv-file"
+                                onChange={(event) => {
+                                  onChange(event.target.files);
+                                }}
+                                {...fieldProps}
+                              />
+                              <label htmlFor="contact-csv-file" className="cursor-pointer w-full flex flex-col items-center gap-2">
+                                <Upload className="h-8 w-8 text-gray-400" />
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {value && value.length > 0 ? value[0].name : 'Click to upload CSV file'}
+                                </span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  CSV file with a column for phone numbers
+                                </span>
+                              </label>
+                            </div>
+                          </FormControl>
+                          <FormDescription>
+                            <a 
+                              href="/sample-contacts.csv" 
+                              className="text-jaylink-600 hover:text-jaylink-700"
+                              download
+                            >
+                              Download sample CSV template
+                            </a>
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setOpenDialog(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        type="submit"
+                        className="bg-jaylink-600 hover:bg-jaylink-700"
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? "Uploading..." : "Upload and Create Group"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+            
+            <Dialog open={openDialog === "new"} onOpenChange={(open) => setOpenDialog(open ? "new" : null)}>
+              <DialogTrigger asChild>
+                <Button className="bg-jaylink-600 hover:bg-jaylink-700">
+                  Create New Group
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Create a New Contact Group</DialogTitle>
+                  <DialogDescription>
+                    Create a new group to organize your contacts
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <Form {...newGroupForm}>
+                  <form onSubmit={newGroupForm.handleSubmit(onSubmitNewGroup)} className="space-y-6 py-4">
+                    <FormField
+                      control={newGroupForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Group Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., Customers" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={newGroupForm.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Brief description of this group" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={newGroupForm.control}
+                      name="numbers"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Numbers</FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Enter phone numbers - one per line or comma-separated" 
+                              className="min-h-[100px]"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Enter each number on a new line or separate with commas
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setOpenDialog(null)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        type="submit"
+                        className="bg-jaylink-600 hover:bg-jaylink-700"
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? "Creating..." : "Create Group"}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
           </div>
-        </main>
-      </div>
-    </div>
+        </div>
+        
+        {/* Groups Table */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-subtle">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-center">Contacts</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-jaylink-600" />
+                        {group.name}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {group.description}
+                    </TableCell>
+                    <TableCell className="text-center">{group.count}</TableCell>
+                    <TableCell>{group.createdAt}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => sendSMSToGroup(group.id)}>
+                            <Send className="h-4 w-4 mr-2" />
+                            Send SMS to Group
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Group
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Download className="h-4 w-4 mr-2" />
+                            Export Contacts
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-red-600 hover:text-red-700 focus:text-red-700"
+                            onClick={() => deleteGroup(group.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Group
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                
+                {groups.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      <div className="flex flex-col items-center justify-center">
+                        <Users className="h-10 w-10 text-gray-400 mb-2" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">
+                          No contact groups yet
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                          Create your first contact group to start organizing your contacts
+                        </p>
+                        <Button 
+                          onClick={() => setOpenDialog("new")}
+                          className="bg-jaylink-600 hover:bg-jaylink-700"
+                        >
+                          Create New Group
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </motion.div>
+    </DashboardLayout>
   );
 };
 

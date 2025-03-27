@@ -1,7 +1,7 @@
 
 import { useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { AudioUploadForm } from "@/components/AudioUploadForm";
+import AudioUploadForm from "@/components/AudioUploadForm";
 
 const AudioMessage = () => {
   useEffect(() => {

@@ -1,7 +1,9 @@
 
-import type { Config } from "tailwindcss";
+import { type Config } from "tailwindcss";
+import { fontFamily } from "tailwindcss/defaultTheme";
+import animatePlugin from "tailwindcss-animate";
 
-export default {
+const config = {
   darkMode: ["class"],
   content: [
     "./pages/**/*.{ts,tsx}",
@@ -20,19 +22,6 @@ export default {
     },
     extend: {
       colors: {
-        jaylink: {
-          50: "#f0f0ff",
-          100: "#e1e1fe",
-          200: "#c8c8fd",
-          300: "#a6a4fc",
-          400: "#8b7ff8",
-          500: "#7c5bf2",
-          600: "#6b42e4",
-          700: "#5e3ad0",
-          800: "#4a31a5",
-          900: "#3c2a85",
-          950: "#221a49",
-        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -66,16 +55,44 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar-background))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))",
+        },
+        jaylink: {
+          50: "#f0f5ff",
+          100: "#e0ebff",
+          200: "#c0d6ff",
+          300: "#90b5ff",
+          400: "#5888ff",
+          500: "#3f6df9",
+          600: "#2549ec",
+          700: "#1a35d5",
+          800: "#1a2eae",
+          900: "#1b2c8a",
+          950: "#141b4d",
+        },
       },
       boxShadow: {
-        'subtle': '0 2px 10px rgba(0, 0, 0, 0.05)',
-        'elevated': '0 4px 20px rgba(0, 0, 0, 0.08)',
-        'glass': '0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+        // Add the missing shadow-glass class
+        "glass": "0 8px 32px rgba(0, 0, 0, 0.05)",
+        "elevated": "0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.04)",
+        "subtle": "0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.02)",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      fontFamily: {
+        sans: ["Inter", ...fontFamily.sans],
+        display: ["var(--font-sans)", ...fontFamily.sans],
       },
       keyframes: {
         "accordion-down": {
@@ -93,5 +110,7 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [animatePlugin],
 } satisfies Config;
+
+export default config;

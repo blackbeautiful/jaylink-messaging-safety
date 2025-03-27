@@ -80,7 +80,7 @@ const config = {
         },
       },
       boxShadow: {
-        // Fix the shadow-glass class
+        // Add the missing shadow-glass class
         "glass": "0 8px 32px rgba(0, 0, 0, 0.05)",
         "elevated": "0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.04)",
         "subtle": "0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.02)",

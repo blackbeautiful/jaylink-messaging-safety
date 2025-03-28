@@ -38,8 +38,8 @@ const registerSchema = z.object({
   confirmPassword: z.string().min(8, {
     message: "Password must be at least 8 characters",
   }),
-  terms: z.literal(true, {
-    errorMap: () => ({ message: "You must accept the terms and conditions" }),
+  terms: z.boolean().refine(val => val === true, {
+    message: "You must accept the terms and conditions"
   }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords do not match",

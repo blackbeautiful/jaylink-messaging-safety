@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import AuthForm from "@/components/AuthForm";
-import { ReactComponent as Logo } from "@/assets/logo.svg";
+import LogoImg from "@/assets/logo.svg";
 
 const Login = () => {
   useEffect(() => {
@@ -23,7 +23,7 @@ const Login = () => {
           {/* Logo */}
           <div className="text-center mb-6">
             <Link to="/" className="inline-block">
-              <Logo width={120} height={40} />
+              <img src={LogoImg} alt="Logo" width={120} height={40} />
             </Link>
           </div>
           

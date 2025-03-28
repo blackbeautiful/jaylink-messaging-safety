@@ -1,4 +1,3 @@
-
 import { ReactNode, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "react-router-dom";
@@ -32,7 +31,7 @@ import {
   Calendar,
   Volume2,
 } from "lucide-react";
-import { ReactComponent as Logo } from "@/assets/logo.svg";
+import LogoImg from "@/assets/logo.svg";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -56,7 +55,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
-  // Mock notifications
   const [notifications, setNotifications] = useState<Notification[]>([
     {
       id: '1',
@@ -94,7 +92,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
     setHasNewNotifications(false);
   };
 
-  // Main navigation items with submenu support
   const sidebarLinks = [
     { 
       name: "Dashboard", 
@@ -150,7 +147,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
     },
   ];
 
-  // Helper function to check if a path is active (including submenu items)
   const isPathActive = (link: any) => {
     if (link.hasSubmenu && link.submenu) {
       return link.submenu.some((subItem: any) => subItem.path === currentPath);
@@ -159,13 +155,11 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
   };
 
   useEffect(() => {
-    // Close mobile menu when route changes
     setIsMobileMenuOpen(false);
   }, [location]);
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Sidebar for desktop */}
       <motion.aside
         initial={{ x: -100, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
@@ -174,10 +168,9 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
       >
         <div className="flex flex-col p-6 space-y-4">
           <Link to="/dashboard" className="flex items-center space-x-2">
-            <Logo width={120} height={40} />
+            <img src={LogoImg} alt="Logo" width={120} height={40} />
           </Link>
           
-          {/* User info moved below logo */}
           <div className="flex items-center space-x-3 pt-2 pb-4 border-b border-gray-200 dark:border-gray-700">
             <div className="w-10 h-10 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600">
               <User size={20} />
@@ -198,7 +191,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
             {sidebarLinks.map((link) => (
               <li key={link.name}>
                 {!link.hasSubmenu ? (
-                  // Regular menu item
                   <Link
                     to={link.path}
                     className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
@@ -217,7 +209,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
                     <span className="font-medium">{link.name}</span>
                   </Link>
                 ) : (
-                  // Submenu parent item
                   <div>
                     <button
                       onClick={() => toggleSubMenu(link.name)}
@@ -244,7 +235,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
                       />
                     </button>
                     
-                    {/* Submenu items */}
                     {expandedMenus.includes(link.name) && link.submenu && (
                       <ul className="pl-10 mt-1 space-y-1">
                         {link.submenu.map((subItem) => (
@@ -288,13 +278,12 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
         </div>
       </motion.aside>
 
-      {/* Mobile sidebar with Sheet */}
       <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
         <SheetContent side="left" className="p-0 w-[280px]">
           <div className="flex flex-col h-full">
             <div className="flex flex-col p-6 space-y-4">
               <Link to="/dashboard" className="flex items-center space-x-2">
-                <Logo width={100} height={34} />
+                <img src={LogoImg} alt="Logo" width={100} height={34} />
               </Link>
               
               <div className="flex items-center space-x-3 pt-2 pb-4 border-b border-gray-200 dark:border-gray-700">
@@ -317,7 +306,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
                 {sidebarLinks.map((link) => (
                   <li key={link.name}>
                     {!link.hasSubmenu ? (
-                      // Regular menu item
                       <Link
                         to={link.path}
                         className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
@@ -336,7 +324,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
                         <span className="font-medium">{link.name}</span>
                       </Link>
                     ) : (
-                      // Submenu parent item
                       <div>
                         <button
                           onClick={() => toggleSubMenu(link.name)}
@@ -363,7 +350,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
                           />
                         </button>
                         
-                        {/* Submenu items */}
                         {expandedMenus.includes(link.name) && link.submenu && (
                           <ul className="pl-10 mt-1 space-y-1">
                             {link.submenu.map((subItem) => (
@@ -409,9 +395,7 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
         </SheetContent>
       </Sheet>
 
-      {/* Main content */}
       <div className="flex-1 md:ml-64">
-        {/* Top navbar */}
         <motion.header
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -420,7 +404,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
         >
           <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
             <div className="flex items-center">
-              {/* Mobile menu trigger */}
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden mr-2">
                   <Menu size={20} />
@@ -450,7 +433,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
               </h1>
             </div>
             <div className="flex items-center space-x-2">
-              {/* Notifications dropdown */}
               <DropdownMenu 
                 open={notificationsOpen} 
                 onOpenChange={(open) => {
@@ -528,7 +510,6 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
           </div>
         </motion.header>
 
-        {/* Page content */}
         <main className="p-4 sm:p-6 md:p-8">
           {children}
         </main>

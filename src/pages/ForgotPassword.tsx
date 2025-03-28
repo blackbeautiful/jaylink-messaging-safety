@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
-import { ReactComponent as Logo } from "@/assets/logo.svg";
+import LogoImg from "@/assets/logo.svg";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -63,7 +63,7 @@ const ForgotPassword = () => {
           {/* Logo */}
           <div className="text-center mb-6">
             <Link to="/" className="inline-block">
-              <Logo width={120} height={40} />
+              <img src={LogoImg} alt="Logo" width={120} height={40} />
             </Link>
           </div>
           

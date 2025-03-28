@@ -1,44 +1,16 @@
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { 
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { 
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { 
-  Card, 
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { toast } from "@/hooks/use-toast";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Users, Upload, Edit, Trash2, MoreVertical, Download } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Plus, Users, Upload } from "lucide-react";
+import GroupList from "@/components/groups/GroupList";
+import ContactList from "@/components/groups/ContactList";
+import GroupDialog from "@/components/groups/GroupDialog";
+import ContactDialog from "@/components/groups/ContactDialog";
 
 interface Contact {
   id: string;
@@ -139,99 +111,9 @@ const Groups = () => {
 
   const [groups, setGroups] = useState<Group[]>(mockGroups);
   const [contacts, setContacts] = useState<Contact[]>(mockContacts);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupDesc, setNewGroupDesc] = useState("");
-  const [newContactName, setNewContactName] = useState("");
-  const [newContactPhone, setNewContactPhone] = useState("");
-  const [newContactEmail, setNewContactEmail] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [openAddGroup, setOpenAddGroup] = useState(false);
   const [openAddContact, setOpenAddContact] = useState(false);
-
-  const handleAddGroup = () => {
-    if (!newGroupName) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Group name is required",
-      });
-      return;
-    }
-
-    const newGroup: Group = {
-      id: Date.now().toString(),
-      name: newGroupName,
-      description: newGroupDesc,
-      members: 0,
-      created: new Date().toISOString().split("T")[0],
-    };
-
-    setGroups([...groups, newGroup]);
-    setNewGroupName("");
-    setNewGroupDesc("");
-    setOpenAddGroup(false);
-
-    toast({
-      title: "Success",
-      description: `Group "${newGroupName}" has been created`,
-    });
-  };
-
-  const handleAddContact = () => {
-    if (!newContactName || !newContactPhone) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Name and phone number are required",
-      });
-      return;
-    }
-
-    if (!newContactPhone.match(/^\+?[0-9\s\-()]+$/)) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please enter a valid phone number",
-      });
-      return;
-    }
-
-    const newContact: Contact = {
-      id: Date.now().toString(),
-      name: newContactName,
-      phone: newContactPhone,
-      email: newContactEmail,
-      added: new Date().toISOString().split("T")[0],
-    };
-
-    setContacts([...contacts, newContact]);
-    setNewContactName("");
-    setNewContactPhone("");
-    setNewContactEmail("");
-    setOpenAddContact(false);
-
-    toast({
-      title: "Success",
-      description: `Contact "${newContactName}" has been added`,
-    });
-  };
-
-  const handleDeleteGroup = (groupId: string) => {
-    setGroups(groups.filter(group => group.id !== groupId));
-    toast({
-      title: "Group deleted",
-      description: "The group has been successfully removed",
-    });
-  };
-
-  const handleDeleteContact = (contactId: string) => {
-    setContacts(contacts.filter(contact => contact.id !== contactId));
-    toast({
-      title: "Contact deleted",
-      description: "The contact has been successfully removed",
-    });
-  };
 
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -244,18 +126,65 @@ const Groups = () => {
     contact.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleAddGroup = (name: string, description: string) => {
+    if (!name) {
+      toast("Group name is required");
+      return;
+    }
+
+    const newGroup: Group = {
+      id: Date.now().toString(),
+      name,
+      description,
+      members: 0,
+      created: new Date().toISOString().split("T")[0],
+    };
+
+    setGroups([...groups, newGroup]);
+    setOpenAddGroup(false);
+    toast(`Group "${name}" has been created`);
+  };
+
+  const handleAddContact = (name: string, phone: string, email: string) => {
+    if (!name || !phone) {
+      toast("Name and phone number are required");
+      return;
+    }
+
+    if (!phone.match(/^\+?[0-9\s\-()]+$/)) {
+      toast("Please enter a valid phone number");
+      return;
+    }
+
+    const newContact: Contact = {
+      id: Date.now().toString(),
+      name,
+      phone,
+      email,
+      added: new Date().toISOString().split("T")[0],
+    };
+
+    setContacts([...contacts, newContact]);
+    setOpenAddContact(false);
+    toast(`Contact "${name}" has been added`);
+  };
+
+  const handleDeleteGroup = (groupId: string) => {
+    setGroups(groups.filter(group => group.id !== groupId));
+    toast("The group has been successfully removed");
+  };
+
+  const handleDeleteContact = (contactId: string) => {
+    setContacts(contacts.filter(contact => contact.id !== contactId));
+    toast("The contact has been successfully removed");
+  };
+
   const handleImportContacts = () => {
-    toast({
-      title: "Import started",
-      description: "Your contacts are being imported. This may take a moment.",
-    });
+    toast("Your contacts are being imported. This may take a moment.");
     
     // Simulate import
     setTimeout(() => {
-      toast({
-        title: "Import complete",
-        description: "25 contacts were successfully imported",
-      });
+      toast("25 contacts were successfully imported");
     }, 2000);
   };
 
@@ -274,99 +203,28 @@ const Groups = () => {
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Dialog open={openAddGroup} onOpenChange={setOpenAddGroup}>
-                <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Group
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Group</DialogTitle>
-                    <DialogDescription>
-                      Add a new contact group for your messaging campaigns.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="group-name">Group Name</Label>
-                      <Input
-                        id="group-name"
-                        placeholder="e.g., Customers, Employees"
-                        value={newGroupName}
-                        onChange={(e) => setNewGroupName(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="group-description">Description (Optional)</Label>
-                      <Textarea
-                        id="group-description"
-                        placeholder="Enter a description for this group"
-                        value={newGroupDesc}
-                        onChange={(e) => setNewGroupDesc(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpenAddGroup(false)}>Cancel</Button>
-                    <Button className="bg-blue-600" onClick={handleAddGroup}>Create Group</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+                onClick={() => setOpenAddGroup(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                New Group
+              </Button>
               
-              <Dialog open={openAddContact} onOpenChange={setOpenAddContact}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full sm:w-auto">
-                    <Users className="mr-2 h-4 w-4" />
-                    Add Contact
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Contact</DialogTitle>
-                    <DialogDescription>
-                      Add a new contact to your contact list.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-name">Name</Label>
-                      <Input
-                        id="contact-name"
-                        placeholder="Full Name"
-                        value={newContactName}
-                        onChange={(e) => setNewContactName(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-phone">Phone Number</Label>
-                      <Input
-                        id="contact-phone"
-                        placeholder="+1 (555) 123-4567"
-                        value={newContactPhone}
-                        onChange={(e) => setNewContactPhone(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contact-email">Email (Optional)</Label>
-                      <Input
-                        id="contact-email"
-                        type="email"
-                        placeholder="email@example.com"
-                        value={newContactEmail}
-                        onChange={(e) => setNewContactEmail(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpenAddContact(false)}>Cancel</Button>
-                    <Button className="bg-blue-600" onClick={handleAddContact}>Add Contact</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <Button 
+                variant="outline" 
+                className="w-full sm:w-auto"
+                onClick={() => setOpenAddContact(true)}
+              >
+                <Users className="mr-2 h-4 w-4" />
+                Add Contact
+              </Button>
               
-              <Button variant="outline" onClick={handleImportContacts} className="w-full sm:w-auto">
+              <Button 
+                variant="outline" 
+                onClick={handleImportContacts} 
+                className="w-full sm:w-auto"
+              >
                 <Upload className="mr-2 h-4 w-4" />
                 Import
               </Button>
@@ -393,65 +251,10 @@ const Groups = () => {
                   <CardDescription>Manage your contact groups for messaging campaigns</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-md border overflow-hidden">
-                    <ScrollArea className="h-[400px] md:h-auto w-full">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Name</TableHead>
-                              <TableHead className="hidden md:table-cell">Description</TableHead>
-                              <TableHead className="text-center">Members</TableHead>
-                              <TableHead className="hidden sm:table-cell">Created</TableHead>
-                              <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredGroups.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={5} className="text-center py-6 text-gray-500">
-                                  No groups found. Create a new group to get started.
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              filteredGroups.map((group) => (
-                                <TableRow key={group.id}>
-                                  <TableCell className="font-medium">{group.name}</TableCell>
-                                  <TableCell className="hidden md:table-cell">{group.description}</TableCell>
-                                  <TableCell className="text-center">{group.members}</TableCell>
-                                  <TableCell className="hidden sm:table-cell">{group.created}</TableCell>
-                                  <TableCell className="text-right">
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                          <MoreVertical className="h-4 w-4" />
-                                          <span className="sr-only">Actions</span>
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuItem>
-                                          <Edit className="mr-2 h-4 w-4" />
-                                          Edit Group
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem>
-                                          <Download className="mr-2 h-4 w-4" />
-                                          Export Contacts
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleDeleteGroup(group.id)} className="text-red-600">
-                                          <Trash2 className="mr-2 h-4 w-4" />
-                                          Delete Group
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </ScrollArea>
-                  </div>
+                  <GroupList 
+                    groups={filteredGroups} 
+                    onDeleteGroup={handleDeleteGroup} 
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -463,67 +266,29 @@ const Groups = () => {
                   <CardDescription>View and manage all your contacts</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-md border overflow-hidden">
-                    <ScrollArea className="h-[400px] md:h-auto w-full">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Phone</TableHead>
-                              <TableHead className="hidden md:table-cell">Email</TableHead>
-                              <TableHead className="hidden sm:table-cell">Added</TableHead>
-                              <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredContacts.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={5} className="text-center py-6 text-gray-500">
-                                  No contacts found. Add a new contact to get started.
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              filteredContacts.map((contact) => (
-                                <TableRow key={contact.id}>
-                                  <TableCell className="font-medium">{contact.name}</TableCell>
-                                  <TableCell>{contact.phone}</TableCell>
-                                  <TableCell className="hidden md:table-cell">{contact.email}</TableCell>
-                                  <TableCell className="hidden sm:table-cell">{contact.added}</TableCell>
-                                  <TableCell className="text-right">
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                          <MoreVertical className="h-4 w-4" />
-                                          <span className="sr-only">Actions</span>
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuItem>
-                                          <Edit className="mr-2 h-4 w-4" />
-                                          Edit Contact
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleDeleteContact(contact.id)} className="text-red-600">
-                                          <Trash2 className="mr-2 h-4 w-4" />
-                                          Delete Contact
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </ScrollArea>
-                  </div>
+                  <ContactList 
+                    contacts={filteredContacts} 
+                    onDeleteContact={handleDeleteContact}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
         </div>
       </div>
+
+      {/* Dialogs */}
+      <GroupDialog
+        open={openAddGroup}
+        onOpenChange={setOpenAddGroup}
+        onSave={handleAddGroup}
+      />
+      
+      <ContactDialog
+        open={openAddContact}
+        onOpenChange={setOpenAddContact}
+        onSave={handleAddContact}
+      />
     </DashboardLayout>
   );
 };

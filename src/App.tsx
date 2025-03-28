@@ -18,6 +18,7 @@ import Groups from "./pages/Groups";
 import Scheduled from "./pages/Scheduled";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import UploadAudio from "./pages/UploadAudio";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/groups" element={<Groups />} />
             <Route path="/scheduled" element={<Scheduled />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/upload-audio" element={<UploadAudio />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

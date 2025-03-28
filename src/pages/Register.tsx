@@ -2,8 +2,8 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import Navbar from "@/components/Navbar";
 import AuthForm from "@/components/AuthForm";
+import { ReactComponent as Logo } from "@/assets/logo.svg";
 
 const Register = () => {
   useEffect(() => {
@@ -11,22 +11,19 @@ const Register = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar />
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 bg-[url('https://images.unsplash.com/photo-1483058712412-4245e9b90334?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=1800')] bg-cover bg-center bg-no-repeat bg-blend-overlay">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex-grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900"
+        className="flex-grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
       >
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-6">
             <Link to="/" className="inline-block">
-              <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
-                Jay<span className="text-jaylink-600">Link</span>
-              </span>
+              <Logo width={120} height={40} />
             </Link>
           </div>
           

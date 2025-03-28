@@ -17,7 +17,6 @@ import {
 import {
   MessageSquare,
   Phone,
-  Upload,
   Settings,
   LogOut,
   User,
@@ -33,6 +32,7 @@ import {
   Calendar,
   Volume2,
 } from "lucide-react";
+import { ReactComponent as Logo } from "@/assets/logo.svg";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -173,10 +173,8 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
         className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
       >
         <div className="flex flex-col p-6 space-y-4">
-          <Link to="/" className="flex items-center space-x-2">
-            <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
-              Jay<span className="text-jaylink-600">Link</span>
-            </span>
+          <Link to="/dashboard" className="flex items-center space-x-2">
+            <Logo width={120} height={40} />
           </Link>
           
           {/* User info moved below logo */}
@@ -295,10 +293,8 @@ const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) =>
         <SheetContent side="left" className="p-0 w-[280px]">
           <div className="flex flex-col h-full">
             <div className="flex flex-col p-6 space-y-4">
-              <Link to="/" className="flex items-center space-x-2">
-                <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
-                  Jay<span className="text-jaylink-600">Link</span>
-                </span>
+              <Link to="/dashboard" className="flex items-center space-x-2">
+                <Logo width={100} height={34} />
               </Link>
               
               <div className="flex items-center space-x-3 pt-2 pb-4 border-b border-gray-200 dark:border-gray-700">

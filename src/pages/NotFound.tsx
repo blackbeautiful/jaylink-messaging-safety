@@ -33,6 +33,7 @@ const NotFound = () => {
     visible: { y: 0, opacity: 1, transition: { duration: 0.5 } }
   };
 
+  // Fixed the type error by correctly typing the variant
   const iconVariants = {
     hidden: { scale: 0.8, opacity: 0 },
     visible: { 
@@ -42,15 +43,6 @@ const NotFound = () => {
         type: "spring",
         stiffness: 100,
         duration: 0.5 
-      }
-    },
-    pulse: {
-      scale: [1, 1.1, 1],
-      opacity: [1, 0.8, 1],
-      transition: {
-        duration: 2,
-        repeat: Infinity,
-        repeatType: "reverse"
       }
     }
   };
@@ -67,7 +59,9 @@ const NotFound = () => {
           className="mb-8 flex justify-center"
           variants={iconVariants}
           initial="hidden"
-          animate={["visible", "pulse"]}
+          animate="visible"
+          // We'll use CSS for the pulse animation instead
+          className="relative animate-pulse"
         >
           <div className="relative">
             <MessageSquareOff className="h-32 w-32 text-jaylink-300 dark:text-jaylink-700" />

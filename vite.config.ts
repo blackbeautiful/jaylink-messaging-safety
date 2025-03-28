@@ -13,7 +13,12 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    svgr(),
+    svgr({
+      svgrOptions: {
+        exportType: "named",
+        ref: true,
+      },
+    }),
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),

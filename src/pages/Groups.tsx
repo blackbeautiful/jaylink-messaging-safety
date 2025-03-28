@@ -28,7 +28,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -277,7 +276,7 @@ const Groups = () => {
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <Dialog open={openAddGroup} onOpenChange={setOpenAddGroup}>
                 <DialogTrigger asChild>
-                  <Button className="bg-jaylink-600 hover:bg-jaylink-700 w-full sm:w-auto">
+                  <Button className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
                     <Plus className="mr-2 h-4 w-4" />
                     New Group
                   </Button>
@@ -311,7 +310,7 @@ const Groups = () => {
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setOpenAddGroup(false)}>Cancel</Button>
-                    <Button className="bg-jaylink-600" onClick={handleAddGroup}>Create Group</Button>
+                    <Button className="bg-blue-600" onClick={handleAddGroup}>Create Group</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -362,12 +361,12 @@ const Groups = () => {
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setOpenAddContact(false)}>Cancel</Button>
-                    <Button className="bg-jaylink-600" onClick={handleAddContact}>Add Contact</Button>
+                    <Button className="bg-blue-600" onClick={handleAddContact}>Add Contact</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
               
-              <Button variant="outline" onClick={handleImportContacts}>
+              <Button variant="outline" onClick={handleImportContacts} className="w-full sm:w-auto">
                 <Upload className="mr-2 h-4 w-4" />
                 Import
               </Button>
@@ -376,7 +375,7 @@ const Groups = () => {
           
           {/* Tabs for groups and contacts */}
           <Tabs defaultValue="groups" className="w-full">
-            <TabsList className="mb-6">
+            <TabsList className="mb-6 overflow-x-auto flex w-full max-w-full">
               <TabsTrigger value="groups" className="flex items-center">
                 <Users className="mr-2 h-4 w-4" />
                 Groups
@@ -394,61 +393,63 @@ const Groups = () => {
                   <CardDescription>Manage your contact groups for messaging campaigns</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-md border">
-                    <ScrollArea className="h-[400px] w-full sm:h-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="hidden md:table-cell">Description</TableHead>
-                            <TableHead className="text-center">Members</TableHead>
-                            <TableHead className="hidden sm:table-cell">Created</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredGroups.length === 0 ? (
+                  <div className="rounded-md border overflow-hidden">
+                    <ScrollArea className="h-[400px] md:h-auto w-full">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
                             <TableRow>
-                              <TableCell colSpan={5} className="text-center py-6 text-gray-500">
-                                No groups found. Create a new group to get started.
-                              </TableCell>
+                              <TableHead>Name</TableHead>
+                              <TableHead className="hidden md:table-cell">Description</TableHead>
+                              <TableHead className="text-center">Members</TableHead>
+                              <TableHead className="hidden sm:table-cell">Created</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
-                          ) : (
-                            filteredGroups.map((group) => (
-                              <TableRow key={group.id}>
-                                <TableCell className="font-medium">{group.name}</TableCell>
-                                <TableCell className="hidden md:table-cell">{group.description}</TableCell>
-                                <TableCell className="text-center">{group.members}</TableCell>
-                                <TableCell className="hidden sm:table-cell">{group.created}</TableCell>
-                                <TableCell className="text-right">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon">
-                                        <MoreVertical className="h-4 w-4" />
-                                        <span className="sr-only">Actions</span>
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem>
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Edit Group
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem>
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Export Contacts
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleDeleteGroup(group.id)} className="text-red-600">
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Delete Group
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredGroups.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center py-6 text-gray-500">
+                                  No groups found. Create a new group to get started.
                                 </TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
+                            ) : (
+                              filteredGroups.map((group) => (
+                                <TableRow key={group.id}>
+                                  <TableCell className="font-medium">{group.name}</TableCell>
+                                  <TableCell className="hidden md:table-cell">{group.description}</TableCell>
+                                  <TableCell className="text-center">{group.members}</TableCell>
+                                  <TableCell className="hidden sm:table-cell">{group.created}</TableCell>
+                                  <TableCell className="text-right">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                          <MoreVertical className="h-4 w-4" />
+                                          <span className="sr-only">Actions</span>
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem>
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          Edit Group
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem>
+                                          <Download className="mr-2 h-4 w-4" />
+                                          Export Contacts
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleDeleteGroup(group.id)} className="text-red-600">
+                                          <Trash2 className="mr-2 h-4 w-4" />
+                                          Delete Group
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </ScrollArea>
                   </div>
                 </CardContent>
@@ -462,57 +463,59 @@ const Groups = () => {
                   <CardDescription>View and manage all your contacts</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-md border">
-                    <ScrollArea className="h-[400px] w-full sm:h-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead className="hidden md:table-cell">Email</TableHead>
-                            <TableHead className="hidden sm:table-cell">Added</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredContacts.length === 0 ? (
+                  <div className="rounded-md border overflow-hidden">
+                    <ScrollArea className="h-[400px] md:h-auto w-full">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
                             <TableRow>
-                              <TableCell colSpan={5} className="text-center py-6 text-gray-500">
-                                No contacts found. Add a new contact to get started.
-                              </TableCell>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Phone</TableHead>
+                              <TableHead className="hidden md:table-cell">Email</TableHead>
+                              <TableHead className="hidden sm:table-cell">Added</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
-                          ) : (
-                            filteredContacts.map((contact) => (
-                              <TableRow key={contact.id}>
-                                <TableCell className="font-medium">{contact.name}</TableCell>
-                                <TableCell>{contact.phone}</TableCell>
-                                <TableCell className="hidden md:table-cell">{contact.email}</TableCell>
-                                <TableCell className="hidden sm:table-cell">{contact.added}</TableCell>
-                                <TableCell className="text-right">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon">
-                                        <MoreVertical className="h-4 w-4" />
-                                        <span className="sr-only">Actions</span>
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem>
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Edit Contact
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleDeleteContact(contact.id)} className="text-red-600">
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Delete Contact
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredContacts.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center py-6 text-gray-500">
+                                  No contacts found. Add a new contact to get started.
                                 </TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
+                            ) : (
+                              filteredContacts.map((contact) => (
+                                <TableRow key={contact.id}>
+                                  <TableCell className="font-medium">{contact.name}</TableCell>
+                                  <TableCell>{contact.phone}</TableCell>
+                                  <TableCell className="hidden md:table-cell">{contact.email}</TableCell>
+                                  <TableCell className="hidden sm:table-cell">{contact.added}</TableCell>
+                                  <TableCell className="text-right">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                          <MoreVertical className="h-4 w-4" />
+                                          <span className="sr-only">Actions</span>
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem>
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          Edit Contact
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleDeleteContact(contact.id)} className="text-red-600">
+                                          <Trash2 className="mr-2 h-4 w-4" />
+                                          Delete Contact
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </ScrollArea>
                   </div>
                 </CardContent>

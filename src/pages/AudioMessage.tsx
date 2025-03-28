@@ -96,11 +96,11 @@ const AudioMessage = () => {
 
   return (
     <DashboardLayout title="Send Audio Message" backLink="/dashboard">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto px-4 sm:px-0">
         <Card className="shadow-lg">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center">
-              <Volume2 className="mr-2 h-5 w-5 text-jaylink-600" />
+              <Volume2 className="mr-2 h-5 w-5 text-blue-600" />
               Send Audio Message
             </CardTitle>
             <CardDescription>
@@ -163,18 +163,18 @@ const AudioMessage = () => {
                 <div className="space-y-2">
                   <Label>Or Record Audio</Label>
                   <div className="border rounded-lg p-6 text-center flex flex-col items-center space-y-4">
-                    <div className="flex justify-center items-center h-16 w-16 rounded-full bg-jaylink-100 text-jaylink-600">
+                    <div className="flex justify-center items-center h-16 w-16 rounded-full bg-blue-100 text-blue-600">
                       {recording ? (
                         <div className="h-6 w-6 rounded-full bg-red-500 animate-pulse" />
                       ) : (
                         <Mic className="h-8 w-8" />
                       )}
                     </div>
-                    <div className="space-x-3">
+                    <div className="space-x-3 flex flex-wrap justify-center gap-2">
                       <Button 
                         onClick={toggleRecording} 
                         variant={recording ? "destructive" : "default"}
-                        className={recording ? "bg-red-500" : "bg-jaylink-600"}
+                        className={recording ? "bg-red-500" : "bg-blue-600"}
                       >
                         {recording ? "Stop Recording" : "Start Recording"}
                       </Button>
@@ -194,14 +194,14 @@ const AudioMessage = () => {
               </div>
             </div>
             
-            <div className="flex justify-between items-center pt-4 border-t">
-              <div className="flex items-center text-amber-600">
-                <AlertCircle className="h-4 w-4 mr-2" />
-                <span className="text-xs">Audio messages will count as multiple SMS credits based on duration</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-4 border-t">
+              <div className="flex items-center text-amber-600 text-xs sm:text-sm">
+                <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                <span>Audio messages will count as multiple SMS credits based on duration</span>
               </div>
               <Button 
                 onClick={handleSend}
-                className="bg-jaylink-600 hover:bg-jaylink-700"
+                className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
               >
                 Send Audio Message
               </Button>

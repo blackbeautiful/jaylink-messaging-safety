@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, X, Check, ChevronRight, Info, AlertCircle } from "lucide-react";

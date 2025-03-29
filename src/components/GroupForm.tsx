@@ -1,6 +1,4 @@
-
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +85,6 @@ const GroupForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Validate form
     if (!formData.name) {
       toast.error("Group name is required");
       setLoading(false);
@@ -100,7 +97,6 @@ const GroupForm = () => {
       return;
     }
 
-    // Simulate API call
     setTimeout(() => {
       const newGroup = {
         id: Math.random().toString(36).substring(2, 9),

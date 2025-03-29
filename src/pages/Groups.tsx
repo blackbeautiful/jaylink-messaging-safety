@@ -2,15 +2,15 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Users, Upload } from "lucide-react";
+import { Users } from "lucide-react";
 import GroupList from "@/components/groups/GroupList";
 import ContactList from "@/components/groups/ContactList";
-import GroupDialog from "@/components/groups/GroupDialog";
-import ContactDialog from "@/components/groups/ContactDialog";
+import AddGroupButton from "@/components/groups/AddGroupButton";
+import AddContactButton from "@/components/groups/AddContactButton";
+import ImportButton from "@/components/groups/ImportButton";
 
 interface Contact {
   id: string;
@@ -112,8 +112,6 @@ const Groups = () => {
   const [groups, setGroups] = useState<Group[]>(mockGroups);
   const [contacts, setContacts] = useState<Contact[]>(mockContacts);
   const [searchTerm, setSearchTerm] = useState("");
-  const [openAddGroup, setOpenAddGroup] = useState(false);
-  const [openAddContact, setOpenAddContact] = useState(false);
 
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -141,7 +139,6 @@ const Groups = () => {
     };
 
     setGroups([...groups, newGroup]);
-    setOpenAddGroup(false);
     toast(`Group "${name}" has been created`);
   };
 
@@ -165,7 +162,6 @@ const Groups = () => {
     };
 
     setContacts([...contacts, newContact]);
-    setOpenAddContact(false);
     toast(`Contact "${name}" has been added`);
   };
 
@@ -203,31 +199,9 @@ const Groups = () => {
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Button 
-                className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
-                onClick={() => setOpenAddGroup(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New Group
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="w-full sm:w-auto"
-                onClick={() => setOpenAddContact(true)}
-              >
-                <Users className="mr-2 h-4 w-4" />
-                Add Contact
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                onClick={handleImportContacts} 
-                className="w-full sm:w-auto"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Import
-              </Button>
+              <AddGroupButton onAddGroup={handleAddGroup} />
+              <AddContactButton onAddContact={handleAddContact} />
+              <ImportButton onImport={handleImportContacts} />
             </div>
           </div>
           
@@ -276,19 +250,6 @@ const Groups = () => {
           </Tabs>
         </div>
       </div>
-
-      {/* Dialogs */}
-      <GroupDialog
-        open={openAddGroup}
-        onOpenChange={setOpenAddGroup}
-        onSave={handleAddGroup}
-      />
-      
-      <ContactDialog
-        open={openAddContact}
-        onOpenChange={setOpenAddContact}
-        onSave={handleAddContact}
-      />
     </DashboardLayout>
   );
 };

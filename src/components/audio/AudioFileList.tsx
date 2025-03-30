@@ -17,22 +17,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AudioFileListProps } from "./AudioFileListProps";
 
-interface AudioFile {
-  id: string;
-  name: string;
-  duration: string;
-  size: string;
-  created: string;
-  type: string;
-}
-
-interface AudioFileListProps {
-  audioFiles: AudioFile[];
-  onDeleteAudio: (id: string) => void;
-}
-
-const AudioFileList = ({ audioFiles, onDeleteAudio }: AudioFileListProps) => {
+const AudioFileList = ({ files, onDelete }: AudioFileListProps) => {
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   const togglePlayPause = (id: string) => {
@@ -52,24 +39,23 @@ const AudioFileList = ({ audioFiles, onDeleteAudio }: AudioFileListProps) => {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead className="w-[100px]">Duration</TableHead>
-                <TableHead className="hidden sm:table-cell w-[100px]">Size</TableHead>
-                <TableHead className="hidden md:table-cell w-[150px]">Created</TableHead>
                 <TableHead className="hidden sm:table-cell w-[100px]">Type</TableHead>
+                <TableHead className="hidden md:table-cell w-[150px]">Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {audioFiles.length === 0 ? (
+              {files.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={5}
                     className="h-32 text-center text-gray-500"
                   >
                     No audio files found. Upload or record an audio file to get started.
                   </TableCell>
                 </TableRow>
               ) : (
-                audioFiles.map((file) => (
+                files.map((file) => (
                   <TableRow key={file.id}>
                     <TableCell className="font-medium">{file.name}</TableCell>
                     <TableCell className="flex items-center">
@@ -85,10 +71,8 @@ const AudioFileList = ({ audioFiles, onDeleteAudio }: AudioFileListProps) => {
                           <Play className="h-3 w-3" />
                         )}
                       </Button>
-                      {file.duration}
+                      {file.duration} sec
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell">{file.size}</TableCell>
-                    <TableCell className="hidden md:table-cell">{file.created}</TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <span
                         className={`px-2 py-1 rounded text-xs font-medium ${
@@ -106,6 +90,7 @@ const AudioFileList = ({ audioFiles, onDeleteAudio }: AudioFileListProps) => {
                           : "TTS"}
                       </span>
                     </TableCell>
+                    <TableCell className="hidden md:table-cell">{file.created}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -119,7 +104,7 @@ const AudioFileList = ({ audioFiles, onDeleteAudio }: AudioFileListProps) => {
                             <Edit className="mr-2 h-4 w-4" />
                             Rename
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onDeleteAudio(file.id)} className="text-red-600">
+                          <DropdownMenuItem onClick={() => onDelete(file.id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>

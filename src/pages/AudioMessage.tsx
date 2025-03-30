@@ -11,7 +11,7 @@ import UploadButton from "@/components/audio/UploadButton";
 import AudioFileList from "@/components/audio/AudioFileList";
 import { FileMusic, Mic, MessageSquare } from "lucide-react";
 
-// Mock data for audio files
+// Modified mock data for audio files to match AudioFileListProps structure
 const MOCK_AUDIO_FILES = [
   {
     id: "1",

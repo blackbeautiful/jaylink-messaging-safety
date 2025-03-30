@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Loader2, Upload, Save, Copy, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 
 const AudioUploadForm = () => {
   const [loading, setLoading] = useState(false);
@@ -27,6 +28,7 @@ const AudioUploadForm = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multipleFileInputRef = useRef<HTMLInputElement>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -63,7 +65,6 @@ const AudioUploadForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Validate before submitting
     if (uploadMode === "single" && !formData.audioFile) {
       toast.error("Please select an audio file to upload");
       setLoading(false);
@@ -76,11 +77,9 @@ const AudioUploadForm = () => {
       return;
     }
 
-    // Simulate API call
     setTimeout(() => {
       setLoading(false);
       
-      // Generate a fake reference ID
       const referenceId = `audio-${Math.random().toString(36).substring(2, 10)}`;
       
       toast.success(

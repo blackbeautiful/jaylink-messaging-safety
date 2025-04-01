@@ -87,7 +87,7 @@ const Navbar = () => {
           </nav>
 
           <div className="hidden md:flex items-center space-x-4">
-            <Link to="/login">
+            <Link to="/">
               <Button variant="outline" className="border-jaylink-200 text-jaylink-700 hover:bg-jaylink-50">
                 Log in
               </Button>
@@ -135,7 +135,7 @@ const Navbar = () => {
                 </Link>
               ))}
               <div className="pt-6 space-y-4">
-                <Link to="/login" className="block">
+                <Link to="/" className="block">
                   <Button 
                     variant="outline" 
                     className="w-full border-jaylink-200 text-jaylink-700 hover:bg-jaylink-50"

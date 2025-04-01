@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AudioFileListProps } from "./AudioFileListProps";
 
-const AudioFileList = ({ files, onDelete }: AudioFileListProps) => {
+const AudioFileList = ({ files = [], onDelete }: AudioFileListProps) => {
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   const togglePlayPause = (id: string) => {
@@ -32,12 +32,12 @@ const AudioFileList = ({ files, onDelete }: AudioFileListProps) => {
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      <ScrollArea className="h-[400px] md:h-auto w-full">
+      <ScrollArea className="h-[400px] md:h-[500px] w-full">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead className="w-[40%] md:w-auto">Name</TableHead>
                 <TableHead className="w-[100px]">Duration</TableHead>
                 <TableHead className="hidden sm:table-cell w-[100px]">Type</TableHead>
                 <TableHead className="hidden md:table-cell w-[150px]">Created</TableHead>
@@ -45,7 +45,7 @@ const AudioFileList = ({ files, onDelete }: AudioFileListProps) => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {files.length === 0 ? (
+              {!files || files.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={5}
@@ -57,21 +57,25 @@ const AudioFileList = ({ files, onDelete }: AudioFileListProps) => {
               ) : (
                 files.map((file) => (
                   <TableRow key={file.id}>
-                    <TableCell className="font-medium">{file.name}</TableCell>
-                    <TableCell className="flex items-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 rounded-full mr-2 text-gray-500 hover:text-gray-700"
-                        onClick={() => togglePlayPause(file.id)}
-                      >
-                        {playingId === file.id ? (
-                          <Pause className="h-3 w-3" />
-                        ) : (
-                          <Play className="h-3 w-3" />
-                        )}
-                      </Button>
-                      {file.duration} sec
+                    <TableCell className="font-medium max-w-[150px] sm:max-w-none truncate">
+                      {file.name}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 rounded-full mr-2 text-gray-500 hover:text-gray-700"
+                          onClick={() => togglePlayPause(file.id)}
+                        >
+                          {playingId === file.id ? (
+                            <Pause className="h-3 w-3" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
+                        </Button>
+                        <span className="whitespace-nowrap">{file.duration} sec</span>
+                      </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <span
@@ -104,7 +108,7 @@ const AudioFileList = ({ files, onDelete }: AudioFileListProps) => {
                             <Edit className="mr-2 h-4 w-4" />
                             Rename
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onDelete(file.id)} className="text-red-600">
+                          <DropdownMenuItem onClick={() => onDelete && onDelete(file.id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Loader2, Upload, Save, Copy, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const AudioUploadForm = () => {
   const [loading, setLoading] = useState(false);
@@ -266,6 +266,16 @@ const AudioUploadForm = () => {
           {uploadMode === "single" ? "Upload Audio File" : "Upload Audio Files"}
         </Button>
       </form>
+
+      {/* Using Dialog without DialogTrigger */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <div className="p-4 text-center">
+            <p>Dialog content goes here</p>
+            <Button onClick={() => setDialogOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };

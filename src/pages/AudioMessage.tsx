@@ -9,10 +9,20 @@ import TTSButton from "@/components/audio/TTSButton";
 import RecordButton from "@/components/audio/RecordButton";
 import UploadButton from "@/components/audio/UploadButton";
 import AudioFileList from "@/components/audio/AudioFileList";
-import { FileMusic, Mic, MessageSquare } from "lucide-react";
+import { FileMusic, Mic, MessageSquare, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
-// Modified mock data for audio files to match AudioFileListProps structure
-const MOCK_AUDIO_FILES = [
+// Type definition for audio files
+interface AudioFile {
+  id: string;
+  name: string;
+  duration: number;
+  type: "tts" | "recording" | "upload";
+  created: string;
+}
+
+// Mock data for audio files
+const MOCK_AUDIO_FILES: AudioFile[] = [
   {
     id: "1",
     name: "Welcome Message",
@@ -51,18 +61,20 @@ const MOCK_AUDIO_FILES = [
 ];
 
 const AudioMessage = () => {
-  const [audioFiles, setAudioFiles] = useState(MOCK_AUDIO_FILES);
+  const [audioFiles, setAudioFiles] = useState<AudioFile[]>(MOCK_AUDIO_FILES);
   const [isUploading, setIsUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Filter files based on active tab
+  // Filter files based on active tab and search query
   const filteredFiles = audioFiles.filter((file) => {
-    if (activeTab === "all") return true;
-    return file.type === activeTab;
+    const matchesTab = activeTab === "all" || file.type === activeTab;
+    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesTab && matchesSearch;
   });
 
   const handleCreateTTS = (name: string, text: string) => {
@@ -71,7 +83,7 @@ const AudioMessage = () => {
       id: Date.now().toString(),
       name,
       duration: Math.ceil(text.split(/\s+/).filter(Boolean).length / 3),
-      type: "tts",
+      type: "tts" as const,
       created: new Date().toISOString().split("T")[0],
     };
 
@@ -85,7 +97,7 @@ const AudioMessage = () => {
       id: Date.now().toString(),
       name,
       duration,
-      type: "recording",
+      type: "recording" as const,
       created: new Date().toISOString().split("T")[0],
     };
 
@@ -102,7 +114,7 @@ const AudioMessage = () => {
         id: Date.now().toString(),
         name,
         duration: Math.floor(Math.random() * 60) + 10, // Random duration
-        type: "upload",
+        type: "upload" as const,
         created: new Date().toISOString().split("T")[0],
       };
 
@@ -119,7 +131,7 @@ const AudioMessage = () => {
 
   return (
     <DashboardLayout title="Audio Messages" backLink="/dashboard">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+      <div className="max-w-7xl mx-auto pb-6">
         <div className="flex flex-col space-y-6">
           {/* Create Audio Section */}
           <motion.div
@@ -127,7 +139,7 @@ const AudioMessage = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Card className="overflow-hidden">
+            <Card>
               <CardHeader>
                 <CardTitle>Create Audio Message</CardTitle>
                 <CardDescription>
@@ -158,35 +170,51 @@ const AudioMessage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs 
-                  defaultValue="all" 
-                  value={activeTab} 
-                  onValueChange={setActiveTab}
-                  className="w-full"
-                >
-                  <TabsList className="grid w-full grid-cols-4 mb-6">
-                    <TabsTrigger value="all">All Files</TabsTrigger>
-                    <TabsTrigger value="tts" className="flex items-center justify-center">
-                      <MessageSquare className="mr-2 h-4 w-4" />
-                      TTS
-                    </TabsTrigger>
-                    <TabsTrigger value="recording" className="flex items-center justify-center">
-                      <Mic className="mr-2 h-4 w-4" />
-                      Recordings
-                    </TabsTrigger>
-                    <TabsTrigger value="upload" className="flex items-center justify-center">
-                      <FileMusic className="mr-2 h-4 w-4" />
-                      Uploads
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value={activeTab}>
-                    <AudioFileList 
-                      files={filteredFiles} 
-                      onDelete={handleDeleteAudio} 
+                <div className="flex flex-col space-y-4">
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input
+                      type="search"
+                      placeholder="Search audio files..."
+                      className="pl-9"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                  
+                  <Tabs 
+                    defaultValue="all" 
+                    value={activeTab} 
+                    onValueChange={setActiveTab}
+                    className="w-full"
+                  >
+                    <div className="overflow-x-auto pb-2">
+                      <TabsList className="grid min-w-max w-full grid-cols-4 mb-6">
+                        <TabsTrigger value="all">All Files</TabsTrigger>
+                        <TabsTrigger value="tts" className="flex items-center justify-center">
+                          <MessageSquare className="mr-2 h-4 w-4" />
+                          <span className="hidden sm:inline">TTS</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="recording" className="flex items-center justify-center">
+                          <Mic className="mr-2 h-4 w-4" />
+                          <span className="hidden sm:inline">Recordings</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="upload" className="flex items-center justify-center">
+                          <FileMusic className="mr-2 h-4 w-4" />
+                          <span className="hidden sm:inline">Uploads</span>
+                        </TabsTrigger>
+                      </TabsList>
+                    </div>
+
+                    <TabsContent value={activeTab}>
+                      <AudioFileList 
+                        files={filteredFiles} 
+                        onDelete={handleDeleteAudio} 
+                      />
+                    </TabsContent>
+                  </Tabs>
+                </div>
               </CardContent>
             </Card>
           </motion.div>

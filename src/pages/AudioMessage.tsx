@@ -1,226 +1,200 @@
 
 import { useState, useEffect } from "react";
-import { toast } from "sonner";
 import { motion } from "framer-motion";
-import DashboardLayout from "@/components/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import TTSButton from "@/components/audio/TTSButton";
-import RecordButton from "@/components/audio/RecordButton";
-import UploadButton from "@/components/audio/UploadButton";
+import { Mic, Upload, MessageSquare } from "lucide-react";
+import { toast } from "sonner";
+import AppLayout from "@/components/layout/AppLayout";
 import AudioFileList from "@/components/audio/AudioFileList";
-import { FileMusic, Mic, MessageSquare, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import RecordButton from "@/components/audio/RecordButton";
+import TTSButton from "@/components/audio/TTSButton";
+import UploadButton from "@/components/audio/UploadButton";
 
-// Type definition for audio files
 interface AudioFile {
   id: string;
   name: string;
-  duration: number;
-  type: "tts" | "recording" | "upload";
+  duration: string;
+  type: "upload" | "recording" | "tts";
   created: string;
+  url?: string;
 }
 
-// Mock data for audio files
-const MOCK_AUDIO_FILES: AudioFile[] = [
-  {
-    id: "1",
-    name: "Welcome Message",
-    duration: 24,
-    type: "tts",
-    created: "2023-05-10",
-  },
-  {
-    id: "2",
-    name: "New Service Announcement",
-    duration: 32,
-    type: "tts",
-    created: "2023-06-15",
-  },
-  {
-    id: "3",
-    name: "Customer Feedback Request",
-    duration: 18,
-    type: "upload",
-    created: "2023-07-20",
-  },
-  {
-    id: "4",
-    name: "Office Closed Notification",
-    duration: 15,
-    type: "recording",
-    created: "2023-08-05",
-  },
-  {
-    id: "5",
-    name: "Holiday Greetings",
-    duration: 45,
-    type: "upload",
-    created: "2023-09-12",
-  },
-];
-
 const AudioMessage = () => {
-  const [audioFiles, setAudioFiles] = useState<AudioFile[]>(MOCK_AUDIO_FILES);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    // Fetch audio files on component mount
+    const fetchAudioFiles = async () => {
+      try {
+        // Mock API call - in production, this would be a real API call
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Mock data
+        setAudioFiles([
+          {
+            id: "1",
+            name: "Welcome Message",
+            duration: "15",
+            type: "tts",
+            created: "2023-07-15"
+          },
+          {
+            id: "2",
+            name: "Payment Reminder",
+            duration: "22",
+            type: "recording",
+            created: "2023-07-10"
+          },
+          {
+            id: "3",
+            name: "New Product Announcement",
+            duration: "45",
+            type: "upload",
+            created: "2023-07-05"
+          }
+        ]);
+      } catch (error) {
+        console.error("Error fetching audio files:", error);
+        toast.error("Failed to load audio files");
+      }
+    };
+
+    fetchAudioFiles();
   }, []);
 
-  // Filter files based on active tab and search query
-  const filteredFiles = audioFiles.filter((file) => {
-    const matchesTab = activeTab === "all" || file.type === activeTab;
-    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
-
-  const handleCreateTTS = (name: string, text: string) => {
-    // Mock TTS creation
-    const newAudio = {
-      id: Date.now().toString(),
-      name,
-      duration: Math.ceil(text.split(/\s+/).filter(Boolean).length / 3),
-      type: "tts" as const,
-      created: new Date().toISOString().split("T")[0],
-    };
-
-    setAudioFiles([newAudio, ...audioFiles]);
-    toast.success("Text-to-Speech audio created successfully");
+  const handleDeleteAudio = (id: string) => {
+    setAudioFiles(prev => prev.filter(file => file.id !== id));
+    toast.success("Audio file deleted");
   };
 
-  const handleSaveRecording = (name: string, duration: number) => {
-    // Mock recording creation
-    const newAudio = {
-      id: Date.now().toString(),
-      name,
-      duration,
-      type: "recording" as const,
-      created: new Date().toISOString().split("T")[0],
-    };
-
-    setAudioFiles([newAudio, ...audioFiles]);
-    toast.success("Audio recording saved successfully");
-  };
-
-  const handleUploadAudio = (name: string, file: File) => {
+  const handleUpload = (name: string, file: File) => {
     setIsUploading(true);
-
-    // Simulate upload
+    
+    // Simulate API call
     setTimeout(() => {
-      const newAudio = {
-        id: Date.now().toString(),
+      const newFile: AudioFile = {
+        id: `upload-${Date.now()}`,
         name,
-        duration: Math.floor(Math.random() * 60) + 10, // Random duration
-        type: "upload" as const,
-        created: new Date().toISOString().split("T")[0],
+        duration: "30", // In real app, get actual duration
+        type: "upload",
+        created: new Date().toISOString().split('T')[0]
       };
-
-      setAudioFiles([newAudio, ...audioFiles]);
+      
+      setAudioFiles(prev => [newFile, ...prev]);
       setIsUploading(false);
       toast.success("Audio file uploaded successfully");
     }, 1500);
   };
 
-  const handleDeleteAudio = (id: string) => {
-    setAudioFiles(audioFiles.filter((file) => file.id !== id));
-    toast.success("Audio file deleted successfully");
+  const handleRecordingComplete = (blob: Blob, duration: number, name: string) => {
+    const newFile: AudioFile = {
+      id: `rec-${Date.now()}`,
+      name,
+      duration: Math.ceil(duration).toString(),
+      type: "recording",
+      created: new Date().toISOString().split('T')[0],
+      url: URL.createObjectURL(blob)
+    };
+    
+    setAudioFiles(prev => [newFile, ...prev]);
+    toast.success("Recording saved successfully");
+  };
+
+  const handleCreateTTS = (name: string, text: string) => {
+    // Simulate API call to create TTS
+    setTimeout(() => {
+      const estimatedDuration = Math.ceil(text.split(/\s+/).filter(Boolean).length / 3);
+      
+      const newFile: AudioFile = {
+        id: `tts-${Date.now()}`,
+        name,
+        duration: estimatedDuration.toString(),
+        type: "tts",
+        created: new Date().toISOString().split('T')[0]
+      };
+      
+      setAudioFiles(prev => [newFile, ...prev]);
+      toast.success("Text-to-speech audio created successfully");
+    }, 1500);
+  };
+
+  const handleUseInCampaign = () => {
+    navigate("/voice-calls");
+    toast.info("Select your audio file in the campaign editor");
   };
 
   return (
-    <DashboardLayout title="Audio Messages" backLink="/dashboard">
-      <div className="max-w-7xl mx-auto pb-6">
-        <div className="flex flex-col space-y-6">
-          {/* Create Audio Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Audio Message</CardTitle>
-                <CardDescription>
-                  Create audio messages to send to your contacts
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  <TTSButton onCreateTTS={handleCreateTTS} />
-                  <RecordButton onSaveRecording={handleSaveRecording} />
-                  <UploadButton onUpload={handleUploadAudio} isUploading={isUploading} />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+    <AppLayout title="Audio Messages" currentPath="/audio-message">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.5 }}
+        className="space-y-6"
+      >
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle>Create Audio Message</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <RecordButton onRecordingComplete={handleRecordingComplete} />
+              <UploadButton onUpload={handleUpload} isUploading={isUploading} />
+              <TTSButton onCreateTTS={handleCreateTTS} />
+            </div>
+          </CardContent>
+        </Card>
 
-          {/* Audio Files List */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Audio Files</CardTitle>
-                <CardDescription>
-                  Manage your saved audio files
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col space-y-4">
-                  {/* Search Bar */}
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                      type="search"
-                      placeholder="Search audio files..."
-                      className="pl-9"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  
-                  <Tabs 
-                    defaultValue="all" 
-                    value={activeTab} 
-                    onValueChange={setActiveTab}
-                    className="w-full"
-                  >
-                    <div className="overflow-x-auto pb-2">
-                      <TabsList className="grid min-w-max w-full grid-cols-4 mb-6">
-                        <TabsTrigger value="all">All Files</TabsTrigger>
-                        <TabsTrigger value="tts" className="flex items-center justify-center">
-                          <MessageSquare className="mr-2 h-4 w-4" />
-                          <span className="hidden sm:inline">TTS</span>
-                        </TabsTrigger>
-                        <TabsTrigger value="recording" className="flex items-center justify-center">
-                          <Mic className="mr-2 h-4 w-4" />
-                          <span className="hidden sm:inline">Recordings</span>
-                        </TabsTrigger>
-                        <TabsTrigger value="upload" className="flex items-center justify-center">
-                          <FileMusic className="mr-2 h-4 w-4" />
-                          <span className="hidden sm:inline">Uploads</span>
-                        </TabsTrigger>
-                      </TabsList>
-                    </div>
+        <Tabs defaultValue="all" className="w-full">
+          <TabsList className="grid grid-cols-4 mb-4">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="recordings">Recordings</TabsTrigger>
+            <TabsTrigger value="uploads">Uploads</TabsTrigger>
+            <TabsTrigger value="tts">TTS</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="all">
+            <AudioFileList files={audioFiles} onDelete={handleDeleteAudio} />
+          </TabsContent>
+          
+          <TabsContent value="recordings">
+            <AudioFileList 
+              files={audioFiles.filter(file => file.type === "recording")} 
+              onDelete={handleDeleteAudio} 
+            />
+          </TabsContent>
+          
+          <TabsContent value="uploads">
+            <AudioFileList 
+              files={audioFiles.filter(file => file.type === "upload")} 
+              onDelete={handleDeleteAudio} 
+            />
+          </TabsContent>
+          
+          <TabsContent value="tts">
+            <AudioFileList 
+              files={audioFiles.filter(file => file.type === "tts")} 
+              onDelete={handleDeleteAudio} 
+            />
+          </TabsContent>
+        </Tabs>
 
-                    <TabsContent value={activeTab}>
-                      <AudioFileList 
-                        files={filteredFiles} 
-                        onDelete={handleDeleteAudio} 
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+        <div className="flex justify-end">
+          <Button 
+            onClick={handleUseInCampaign} 
+            className="bg-jaylink-600 hover:bg-jaylink-700 flex items-center"
+          >
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Use in Voice Campaign
+          </Button>
         </div>
-      </div>
-    </DashboardLayout>
+      </motion.div>
+    </AppLayout>
   );
 };
 

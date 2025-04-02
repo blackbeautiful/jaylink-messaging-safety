@@ -4,15 +4,9 @@
  * This module handles all interactions with the SMSPROVIDER API and WordPress API
  */
 
-// API Configuration - This would come from environment variables in a real app
-const SMS_API_BASE_URL = "https://customer.smsprovider.com.ng/api/";
-const SMS_API_USERNAME = "DEMO_USERNAME"; // Replace with real credentials in production
-const SMS_API_PASSWORD = "DEMO_PASSWORD"; // Replace with real credentials in production
-
-// WordPress API configuration
-const WP_API_BASE_URL = "https://your-wordpress-site.com/wp-json/";
-const WP_API_USERNAME = "DEMO_WP_USER"; // Replace with real credentials
-const WP_API_PASSWORD = "DEMO_WP_PASS"; // Replace with real credentials
+import { SMS_API_CONFIG, WP_API_CONFIG } from "@/config/api";
+import { WPAuthResponse, WPUser, WPPost, WPCategory, WPTag, WPMediaItem } from "@/types/wordpress";
+import { AudioFile } from "@/types/audio";
 
 // Error codes mapping as per API documentation
 export const ERROR_CODES: Record<string, string> = {
@@ -40,36 +34,19 @@ export const ERROR_CODES: Record<string, string> = {
 };
 
 // Types for API responses
-type ApiSuccessResponse = {
+export type ApiSuccessResponse = {
   status: "OK" | "success";
   count?: number;
   price?: number;
   data?: Record<string, any>;
 };
 
-type ApiErrorResponse = {
+export type ApiErrorResponse = {
   error: string;
   errno: string;
 };
 
-type ApiResponse = ApiSuccessResponse | ApiErrorResponse;
-
-// WordPress types
-type WPAuthToken = {
-  token: string;
-  user_email: string;
-  user_nicename: string;
-  user_display_name: string;
-};
-
-type WPPost = {
-  id: number;
-  title: { rendered: string };
-  content: { rendered: string };
-  excerpt: { rendered: string };
-  acf?: Record<string, any>;
-  [key: string]: any;
-};
+export type ApiResponse = ApiSuccessResponse | ApiErrorResponse;
 
 // Helper to determine if the response is an error
 export const isErrorResponse = (response: ApiResponse): response is ApiErrorResponse => {
@@ -79,12 +56,12 @@ export const isErrorResponse = (response: ApiResponse): response is ApiErrorResp
 // Base function to make SMS API requests
 const makeSmsApiRequest = async (params: Record<string, any>): Promise<ApiResponse> => {
   try {
-    const url = new URL(SMS_API_BASE_URL);
+    const url = new URL(SMS_API_CONFIG.BASE_URL);
     
     // Add base credentials to all requests
     const allParams = {
-      username: SMS_API_USERNAME,
-      password: SMS_API_PASSWORD,
+      username: SMS_API_CONFIG.USERNAME,
+      password: SMS_API_CONFIG.PASSWORD,
       ...params
     };
     
@@ -97,6 +74,11 @@ const makeSmsApiRequest = async (params: Record<string, any>): Promise<ApiRespon
     
     // In a real implementation, this would be a fetch to the actual API
     const response = await fetch(url.toString());
+    
+    if (!response.ok) {
+      throw new Error(`SMS API error: ${response.status}`);
+    }
+    
     const data = await response.json();
     
     return data;
@@ -110,50 +92,37 @@ const makeSmsApiRequest = async (params: Record<string, any>): Promise<ApiRespon
 };
 
 // WordPress API Authentication
-const getWpAuthToken = async (): Promise<string | null> => {
-  try {
-    const response = await fetch(`${WP_API_BASE_URL}jwt-auth/v1/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        username: WP_API_USERNAME,
-        password: WP_API_PASSWORD
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Authentication failed: ${response.status}`);
-    }
-    
-    const data: WPAuthToken = await response.json();
-    return data.token;
-  } catch (error) {
-    console.error("WordPress authentication failed:", error);
-    return null;
-  }
+const getWpAuthToken = (): string | null => {
+  // Get token from localStorage
+  return localStorage.getItem('wp_token');
 };
 
 // Base function to make WordPress API requests
 const makeWpApiRequest = async <T>(
   endpoint: string, 
   method: string = 'GET', 
-  data?: any
+  data?: any,
+  requiresAuth: boolean = true
 ): Promise<T | null> => {
   try {
-    const token = await getWpAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
     
-    if (!token) {
-      throw new Error("Could not authenticate with WordPress");
+    // Add authorization header if required and token exists
+    if (requiresAuth) {
+      const token = getWpAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else if (endpoint !== 'jwt-auth/v1/token') {
+        // Don't throw for auth endpoints
+        throw new Error("Authentication required");
+      }
     }
     
-    const response = await fetch(`${WP_API_BASE_URL}wp/v2/${endpoint}`, {
+    const response = await fetch(`${WP_API_CONFIG.BASE_URL}${endpoint}`, {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers,
       body: data ? JSON.stringify(data) : undefined
     });
     
@@ -300,14 +269,24 @@ export const smsApiService = {
 
 // WordPress API Service functions
 export const wpApiService = {
+  // WordPress authentication
+  login: async (username: string, password: string): Promise<WPAuthResponse | null> => {
+    return makeWpApiRequest<WPAuthResponse>(
+      'jwt-auth/v1/token', 
+      'POST',
+      { username, password },
+      false
+    );
+  },
+  
   // Get posts (with ACF fields if available)
   getPosts: async (page: number = 1, perPage: number = 10) => {
-    return makeWpApiRequest<WPPost[]>(`posts?page=${page}&per_page=${perPage}&_embed=1&acf=1`);
+    return makeWpApiRequest<WPPost[]>(`wp/v2/posts?page=${page}&per_page=${perPage}&_embed=1&acf=1`);
   },
   
   // Get single post by ID
   getPost: async (id: number) => {
-    return makeWpApiRequest<WPPost>(`posts/${id}?_embed=1&acf=1`);
+    return makeWpApiRequest<WPPost>(`wp/v2/posts/${id}?_embed=1&acf=1`);
   },
   
   // Create a new post
@@ -319,22 +298,55 @@ export const wpApiService = {
       acf: acfFields
     };
     
-    return makeWpApiRequest<WPPost>('posts', 'POST', postData);
+    return makeWpApiRequest<WPPost>('wp/v2/posts', 'POST', postData);
   },
   
   // Update a post
   updatePost: async (id: number, data: Partial<WPPost>) => {
-    return makeWpApiRequest<WPPost>(`posts/${id}`, 'PUT', data);
+    return makeWpApiRequest<WPPost>(`wp/v2/posts/${id}`, 'PUT', data);
   },
   
   // Delete a post
   deletePost: async (id: number) => {
-    return makeWpApiRequest<{ deleted: boolean }>(`posts/${id}`, 'DELETE');
+    return makeWpApiRequest<{ deleted: boolean }>(`wp/v2/posts/${id}`, 'DELETE');
   },
   
   // Get current user
   getCurrentUser: async () => {
-    return makeWpApiRequest('users/me');
+    return makeWpApiRequest<WPUser>('wp/v2/users/me');
+  },
+
+  // Get categories
+  getCategories: async (page: number = 1, perPage: number = 20) => {
+    return makeWpApiRequest<WPCategory[]>(`wp/v2/categories?page=${page}&per_page=${perPage}`);
+  },
+
+  // Get tags
+  getTags: async (page: number = 1, perPage: number = 20) => {
+    return makeWpApiRequest<WPTag[]>(`wp/v2/tags?page=${page}&per_page=${perPage}`);
+  },
+
+  // Get media items
+  getMedia: async (page: number = 1, perPage: number = 20) => {
+    return makeWpApiRequest<WPMediaItem[]>(`wp/v2/media?page=${page}&per_page=${perPage}`);
+  },
+
+  // Upload media
+  uploadMedia: async (file: File, title?: string) => {
+    // Convert file to base64
+    const base64 = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        resolve(content.split(',')[1]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    return makeWpApiRequest<WPMediaItem>('wp/v2/media', 'POST', {
+      file: base64,
+      title: title || file.name
+    });
   }
 };
 

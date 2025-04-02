@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -43,6 +43,8 @@ const App = () => (
             <Route path="/scheduled" element={<Scheduled />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/upload-audio" element={<UploadAudio />} />
+            {/* Redirect /login to the root path */}
+            <Route path="/login" element={<Navigate to="/" replace />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

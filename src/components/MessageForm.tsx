@@ -20,10 +20,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { CalendarIcon, ChevronDown, Upload } from "lucide-react";
+import { CalendarIcon, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import apiService from "@/utils/apiService";
+import { smsApiService } from "@/utils/apiService";
 
 // Define the form schema
 const messageFormSchema = z.object({
@@ -102,7 +102,7 @@ const MessageForm = () => {
       const recipients = data.recipients.split(',').map(r => r.trim()).join(',');
       
       // Call the API service to send the SMS
-      const response = await apiService.sendSMS(
+      const response = await smsApiService.sendSMS(
         recipients,
         data.message,
         data.senderId,
@@ -151,7 +151,7 @@ const MessageForm = () => {
       }
       
       // Call the API service to send the bulk SMS
-      const response = await apiService.sendBulkSMS(
+      const response = await smsApiService.sendBulkSMS(
         csvFile,
         data.message,
         data.senderId,

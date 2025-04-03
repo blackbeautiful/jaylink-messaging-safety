@@ -1,558 +1,356 @@
 
 import { useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import * as z from "zod";
-import { format } from "date-fns";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Loader2, Send, Calendar, UsersRound } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { CalendarIcon, Upload } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { toast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+import ContactSelector, { Contact } from "./contacts/ContactSelector";
+import GroupSelector, { Group } from "./groups/GroupSelector";
 import { smsApiService } from "@/utils/apiService";
 
-// Define the form schema
-const messageFormSchema = z.object({
-  recipients: z.string().min(1, { message: "Please enter at least one recipient" }),
-  message: z.string().min(1, { message: "Message is required" }).max(918, {
-    message: "Message cannot be longer than 918 characters (6 concatenated SMS)",
-  }),
-  senderId: z.string().min(1, { message: "Sender ID is required" }).max(11, {
-    message: "Sender ID cannot be longer than 11 characters",
-  }),
-  schedule: z.boolean().default(false),
-  scheduledDate: z.date().optional(),
-});
+// Mock data for development
+const mockContacts = [
+  { id: "1", name: "John Smith", phone: "+1 (555) 123-4567", email: "john.smith@example.com" },
+  { id: "2", name: "Sarah Johnson", phone: "+1 (555) 987-6543", email: "sarah.j@example.com" },
+  { id: "3", name: "Michael Brown", phone: "+1 (555) 456-7890", email: "michael.b@example.com" },
+  { id: "4", name: "Emma Wilson", phone: "+1 (555) 789-0123", email: "emma.w@example.com" },
+  { id: "5", name: "David Lee", phone: "+1 (555) 234-5678", email: "david.lee@example.com" },
+];
 
-// Extending the schema for bulk SMS
-const bulkMessageFormSchema = messageFormSchema.extend({
-  csvFile: z.instanceof(FileList).refine((files) => files.length > 0, {
-    message: "Please upload a CSV file",
-  }),
-});
-
-type MessageFormValues = z.infer<typeof messageFormSchema>;
-type BulkMessageFormValues = z.infer<typeof bulkMessageFormSchema>;
+const mockGroups = [
+  { id: "1", name: "Customers", description: "All paying customers", members: 128 },
+  { id: "2", name: "Employees", description: "Internal staff members", members: 42 },
+  { id: "3", name: "Subscribers", description: "Newsletter subscribers", members: 2156 },
+  { id: "4", name: "VIP Clients", description: "Premium customers", members: 17 },
+];
 
 const MessageForm = () => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedTab, setSelectedTab] = useState("single");
-  const [characterCount, setCharacterCount] = useState(0);
-  const [smsCount, setSmsCount] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [scheduledMessage, setScheduledMessage] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState("");
+  const isMobile = useIsMobile();
   
-  // Form for single SMS
-  const form = useForm<MessageFormValues>({
-    resolver: zodResolver(messageFormSchema),
-    defaultValues: {
-      recipients: "",
-      message: "",
-      senderId: "",
-      schedule: false,
-    },
+  // Selected contacts/groups state
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  
+  const [formData, setFormData] = useState({
+    recipientType: "direct", // "direct", "contacts", "group"
+    recipients: "",
+    message: "",
+    senderId: "",
+    csvFile: null as File | null,
+    recipientCount: 0,
   });
-  
-  // Form for bulk SMS
-  const bulkForm = useForm<BulkMessageFormValues>({
-    resolver: zodResolver(bulkMessageFormSchema),
-    defaultValues: {
-      recipients: "",
-      message: "",
-      senderId: "",
-      schedule: false,
-      csvFile: undefined,
-    },
-  });
-  
-  // Calculate SMS count based on message length
-  const calculateSMSCount = (message: string) => {
-    const length = message.length;
-    setCharacterCount(length);
-    
-    if (length <= 160) {
-      setSmsCount(1);
-    } else {
-      // For concatenated SMS, each part can only hold 153 characters
-      // due to the need for header information
-      setSmsCount(Math.ceil(length / 153));
-    }
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
   };
   
-  // Handle form submission for single SMS
-  const onSubmit = async (data: MessageFormValues) => {
+  const handleContactsSelected = (contacts: Contact[]) => {
+    setSelectedContacts(contacts);
+    // Join phone numbers with commas
+    const phoneNumbers = contacts.map(c => c.phone).join(", ");
+    setFormData({
+      ...formData,
+      recipientType: "contacts",
+      recipients: phoneNumbers,
+      recipientCount: contacts.length,
+    });
+  };
+  
+  const handleGroupSelected = (group: Group) => {
+    setSelectedGroup(group);
+    setFormData({
+      ...formData,
+      recipientType: "group",
+      recipients: `Group: ${group.name}`,
+      recipientCount: group.members,
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    // Validate before submitting
+    if (!formData.recipients && formData.recipientType === "direct") {
+      toast.error("Please enter at least one recipient");
+      setLoading(false);
+      return;
+    }
+
+    if (!formData.message) {
+      toast.error("Please enter a message");
+      setLoading(false);
+      return;
+    }
+
     try {
-      setIsSubmitting(true);
+      // Prepare the recipients based on the type
+      let recipients;
       
-      console.log("Sending message with data:", data);
-      
-      // Format the recipients as comma-separated list for the API
-      const recipients = data.recipients.split(',').map(r => r.trim()).join(',');
-      
-      // Call the API service to send the SMS
-      const response = await smsApiService.sendSMS(
+      if (formData.recipientType === "direct") {
+        recipients = formData.recipients;
+      } else if (formData.recipientType === "contacts") {
+        recipients = selectedContacts.map(c => c.phone).join(",");
+      } else if (formData.recipientType === "group" && selectedGroup) {
+        // In a real app, you would fetch all contacts in this group
+        // For now, we'll just use the group's id or name
+        recipients = `group_${selectedGroup.id}`;
+      }
+
+      // Call the API
+      await smsApiService.sendSMS({
         recipients,
-        data.message,
-        data.senderId,
-        data.schedule && data.scheduledDate ? format(data.scheduledDate, "yyyy-MM-dd HH:mm") : undefined
+        message: formData.message,
+        senderId: formData.senderId,
+        scheduled: scheduledMessage ? scheduledDate : undefined
+      });
+
+      toast.success(
+        scheduledMessage
+          ? `Message scheduled to ${formData.recipientCount || '1+'} recipient(s)`
+          : `Message sent to ${formData.recipientCount || '1+'} recipient(s)`
       );
       
-      // Check if the API response indicates an error
-      if ("error" in response) {
-        throw new Error(response.error);
-      }
-      
-      // Show success toast
-      toast({
-        title: "Message sent successfully",
-        description: `Sent to ${recipients.split(',').length} recipient(s)`,
+      // Reset form
+      setFormData({
+        recipientType: "direct",
+        recipients: "",
+        message: "",
+        senderId: "",
+        csvFile: null,
+        recipientCount: 0,
       });
-      
-      // Reset the form
-      form.reset();
+      setSelectedContacts([]);
+      setSelectedGroup(null);
+      setScheduledMessage(false);
+      setScheduledDate("");
     } catch (error) {
+      toast.error("Failed to send message");
       console.error("Error sending message:", error);
-      
-      // Show error toast
-      toast({
-        variant: "destructive",
-        title: "Failed to send message",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-      });
     } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  // Handle form submission for bulk SMS
-  const onBulkSubmit = async (data: BulkMessageFormValues) => {
-    try {
-      setIsSubmitting(true);
-      
-      console.log("Sending bulk message with data:", data);
-      
-      // Get the CSV file
-      const csvFile = data.csvFile?.[0];
-      
-      if (!csvFile) {
-        throw new Error("Please upload a CSV file");
-      }
-      
-      // Call the API service to send the bulk SMS
-      const response = await smsApiService.sendBulkSMS(
-        csvFile,
-        data.message,
-        data.senderId,
-        data.schedule && data.scheduledDate ? format(data.scheduledDate, "yyyy-MM-dd HH:mm") : undefined
-      );
-      
-      // Check if the API response indicates an error
-      if ("error" in response) {
-        throw new Error(response.error);
-      }
-      
-      // Show success toast
-      toast({
-        title: "Bulk message sent successfully",
-        description: "Your message is being processed for delivery",
-      });
-      
-      // Reset the form
-      bulkForm.reset();
-    } catch (error) {
-      console.error("Error sending bulk message:", error);
-      
-      // Show error toast
-      toast({
-        variant: "destructive",
-        title: "Failed to send bulk message",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
-      });
-    } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-subtle p-6">
-      <Tabs defaultValue="single" onValueChange={setSelectedTab}>
-        <TabsList className="grid grid-cols-2 mb-6">
-          <TabsTrigger value="single">Single SMS</TabsTrigger>
-          <TabsTrigger value="bulk">Bulk SMS</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="single">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="recipients"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Recipients</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="2348030000000, 2348020000000" 
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Enter phone numbers separated by commas
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="senderId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sender ID</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="Your Brand Name or ID (Max 11 characters)" 
-                        {...field} 
-                        maxLength={11}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      This will appear as the sender of the message (max 11 characters)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="message"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Message</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Type your message here" 
-                        className="min-h-[120px]" 
-                        {...field} 
-                        onChange={(e) => {
-                          field.onChange(e);
-                          calculateSMSCount(e.target.value);
-                        }}
-                      />
-                    </FormControl>
-                    <div className="flex justify-between items-center mt-2">
-                      <FormDescription>
-                        {characterCount} characters | {smsCount} SMS
-                      </FormDescription>
-                      {smsCount > 3 && (
-                        <FormDescription className="text-amber-500">
-                          Long message (6 SMS max)
-                        </FormDescription>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="schedule"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Schedule message</FormLabel>
-                      <FormDescription>
-                        Send this message at a later time
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              
-              {form.watch("schedule") && (
-                <FormField
-                  control={form.control}
-                  name="scheduledDate"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Scheduled date</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP HH:mm")
-                              ) : (
-                                <span>Pick a date and time</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) =>
-                              date < new Date()
-                            }
-                            initialFocus
-                          />
-                          <div className="p-3 border-t border-border">
-                            <Input
-                              type="time"
-                              onChange={(e) => {
-                                const [hours, minutes] = e.target.value.split(':');
-                                const newDate = field.value ? new Date(field.value) : new Date();
-                                newDate.setHours(parseInt(hours, 10));
-                                newDate.setMinutes(parseInt(minutes, 10));
-                                field.onChange(newDate);
-                              }}
-                              value={field.value ? format(field.value, "HH:mm") : ''}
-                            />
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <FormDescription>
-                        Your message will be sent at this time
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-              
-              <Button 
-                type="submit" 
-                className="w-full bg-jaylink-600 hover:bg-jaylink-700"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Sending..." : "Send Message"}
-              </Button>
-            </form>
-          </Form>
-        </TabsContent>
-        
-        <TabsContent value="bulk">
-          <Form {...bulkForm}>
-            <form onSubmit={bulkForm.handleSubmit(onBulkSubmit)} className="space-y-6">
-              <FormField
-                control={bulkForm.control}
-                name="csvFile"
-                render={({ field: { value, onChange, ...fieldProps } }) => (
-                  <FormItem>
-                    <FormLabel>Upload contacts (CSV)</FormLabel>
-                    <FormControl>
-                      <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
-                        <Input
-                          type="file"
-                          accept=".csv"
-                          className="hidden"
-                          id="csv-file"
-                          onChange={(event) => {
-                            onChange(event.target.files);
-                          }}
-                          {...fieldProps}
-                        />
-                        <label htmlFor="csv-file" className="cursor-pointer w-full flex flex-col items-center gap-2">
-                          <Upload className="h-8 w-8 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            {value && value.length > 0 ? value[0].name : 'Click to upload CSV file'}
-                          </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            CSV file with a column for phone numbers
-                          </span>
-                        </label>
-                      </div>
-                    </FormControl>
-                    <FormDescription>
-                      <a 
-                        href="/sample-contacts.csv" 
-                        className="text-jaylink-600 hover:text-jaylink-700"
-                        download
-                      >
-                        Download sample CSV template
-                      </a>
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={bulkForm.control}
-                name="senderId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sender ID</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="Your Brand Name or ID (Max 11 characters)" 
-                        {...field} 
-                        maxLength={11}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      This will appear as the sender of the message (max 11 characters)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={bulkForm.control}
-                name="message"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Message</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Type your message here" 
-                        className="min-h-[120px]" 
-                        {...field} 
-                        onChange={(e) => {
-                          field.onChange(e);
-                          calculateSMSCount(e.target.value);
-                        }}
-                      />
-                    </FormControl>
-                    <div className="flex justify-between items-center mt-2">
-                      <FormDescription>
-                        {characterCount} characters | {smsCount} SMS
-                      </FormDescription>
-                      {smsCount > 3 && (
-                        <FormDescription className="text-amber-500">
-                          Long message (6 SMS max)
-                        </FormDescription>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6 }}
+      className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-subtle"
+    >
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Compose Message
+        </h2>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-600 dark:text-gray-400">Bulk Mode</span>
+          <Switch 
+            checked={bulkMode} 
+            onCheckedChange={setBulkMode}
+            aria-label="Toggle bulk mode" 
+          />
+        </div>
+      </div>
 
-              <FormField
-                control={bulkForm.control}
-                name="schedule"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Schedule message</FormLabel>
-                      <FormDescription>
-                        Send this message at a later time
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-6">
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
+            <div className="space-y-1">
+              <Label htmlFor="recipientType">Recipient Type</Label>
+              <Select 
+                value={formData.recipientType} 
+                onValueChange={(value) => handleSelectChange("recipientType", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select recipient type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="direct">Direct Entry</SelectItem>
+                  <SelectItem value="contacts">From Contacts</SelectItem>
+                  <SelectItem value="group">From Group</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="senderId">Sender ID</Label>
+              <Select
+                value={formData.senderId}
+                onValueChange={(value) => handleSelectChange("senderId", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select sender ID" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="JAYLINK">JAYLINK</SelectItem>
+                  <SelectItem value="COMPANY">COMPANY</SelectItem>
+                  <SelectItem value="INFO">INFO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {formData.recipientType === "direct" && (
+            <div>
+              <Label htmlFor="recipients">Recipients</Label>
+              <Input
+                id="recipients"
+                name="recipients"
+                placeholder="Enter phone numbers separated by commas"
+                value={formData.recipients}
+                onChange={handleInputChange}
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Format: +234800123456, +234800123457
+              </p>
+            </div>
+          )}
+
+          {formData.recipientType === "contacts" && (
+            <div className="space-y-2">
+              <Label>Select Contacts</Label>
+              <ContactSelector 
+                contacts={mockContacts} 
+                onContactsSelected={handleContactsSelected}
+                buttonText={selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}
               />
               
-              {bulkForm.watch("schedule") && (
-                <FormField
-                  control={bulkForm.control}
-                  name="scheduledDate"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Scheduled date</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "PPP HH:mm")
-                              ) : (
-                                <span>Pick a date and time</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) =>
-                              date < new Date()
-                            }
-                            initialFocus
-                          />
-                          <div className="p-3 border-t border-border">
-                            <Input
-                              type="time"
-                              onChange={(e) => {
-                                const [hours, minutes] = e.target.value.split(':');
-                                const newDate = field.value ? new Date(field.value) : new Date();
-                                newDate.setHours(parseInt(hours, 10));
-                                newDate.setMinutes(parseInt(minutes, 10));
-                                field.onChange(newDate);
-                              }}
-                              value={field.value ? format(field.value, "HH:mm") : ''}
-                            />
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <FormDescription>
-                        Your message will be sent at this time
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              {selectedContacts.length > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Selected {selectedContacts.length} contact(s)
+                </div>
               )}
+            </div>
+          )}
+
+          {formData.recipientType === "group" && (
+            <div className="space-y-2">
+              <Label>Select Group</Label>
+              <GroupSelector 
+                groups={mockGroups} 
+                onGroupSelected={handleGroupSelected}
+                buttonText={selectedGroup ? selectedGroup.name : "Select Group"}
+              />
               
-              <Button 
-                type="submit" 
-                className="w-full bg-jaylink-600 hover:bg-jaylink-700"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Sending..." : "Send Bulk Message"}
-              </Button>
-            </form>
-          </Form>
-        </TabsContent>
-      </Tabs>
-    </div>
+              {selectedGroup && (
+                <div className="text-sm text-muted-foreground">
+                  Group with {selectedGroup.members} member(s)
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <Label htmlFor="message">Message</Label>
+            <Textarea
+              id="message"
+              name="message"
+              placeholder="Type your message here..."
+              rows={4}
+              value={formData.message}
+              onChange={handleInputChange}
+              className="mt-1"
+            />
+            <div className="flex justify-between mt-1">
+              <p className="text-xs text-gray-500">
+                Character count: {formData.message.length}
+              </p>
+              <p className="text-xs text-gray-500">
+                {Math.ceil(formData.message.length / 160)} SMS unit(s)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch 
+              id="scheduledMessage"
+              checked={scheduledMessage} 
+              onCheckedChange={setScheduledMessage}
+            />
+            <Label htmlFor="scheduledMessage" className="cursor-pointer">Schedule for later</Label>
+          </div>
+
+          {scheduledMessage && (
+            <div>
+              <Label htmlFor="scheduledDate">Schedule Date & Time</Label>
+              <div className="flex items-center">
+                <Input
+                  id="scheduledDate"
+                  name="scheduledDate"
+                  type="datetime-local"
+                  min={new Date().toISOString().slice(0, 16)}
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                  required={scheduledMessage}
+                  className="mt-1"
+                />
+                <Calendar className="ml-2 text-gray-400" size={20} />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Messages will be sent at the scheduled time
+              </p>
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full bg-jaylink-600 hover:bg-jaylink-700 flex items-center justify-center"
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-2 h-4 w-4" />
+            )}
+            {scheduledMessage ? "Schedule Message" : "Send Message"}
+          </Button>
+        </div>
+      </form>
+    </motion.div>
   );
 };
 

@@ -1,4 +1,4 @@
 
 export interface RecordButtonProps {
-  onRecordingComplete: (blob: Blob, duration: number, name: string) => void;
+  onRecordingComplete?: (blob: Blob, duration: number, name: string) => void;
 }

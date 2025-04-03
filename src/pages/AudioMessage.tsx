@@ -25,12 +25,11 @@ import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
-import RecordButton from "@/components/audio/RecordButton";
-import TTSButton from "@/components/audio/TTSButton";
-import UploadButton from "@/components/audio/UploadButton";
-import AudioFileList from "@/components/audio/AudioFileList";
 import { AudioFile } from "@/types/audio";
 import { smsApiService } from "@/utils/apiService";
+import { useIsMobile } from "@/hooks/use-mobile";
+import ContactSelector, { Contact } from "@/components/contacts/ContactSelector";
+import GroupSelector, { Group } from "@/components/groups/GroupSelector";
 
 // Form schema for audio message
 const messageFormSchema = z.object({
@@ -39,6 +38,7 @@ const messageFormSchema = z.object({
   audioId: z.string().optional(),
   schedule: z.boolean().default(false),
   scheduledDate: z.date().optional(),
+  recipientType: z.string().default("direct"),
 });
 
 type MessageFormValues = z.infer<typeof messageFormSchema>;
@@ -48,7 +48,7 @@ const sampleAudioFiles: AudioFile[] = [
   {
     id: "1",
     name: "Welcome Message",
-    duration: 22, // Changed from string to number
+    duration: 22,
     type: "mp3",
     created: "2023-06-15",
     url: "#"
@@ -79,6 +79,23 @@ const sampleAudioFiles: AudioFile[] = [
   }
 ];
 
+// Sample contacts for demo
+const mockContacts: Contact[] = [
+  { id: "1", name: "John Smith", phone: "+1 (555) 123-4567", email: "john.smith@example.com" },
+  { id: "2", name: "Sarah Johnson", phone: "+1 (555) 987-6543", email: "sarah.j@example.com" },
+  { id: "3", name: "Michael Brown", phone: "+1 (555) 456-7890", email: "michael.b@example.com" },
+  { id: "4", name: "Emma Wilson", phone: "+1 (555) 789-0123", email: "emma.w@example.com" },
+  { id: "5", name: "David Lee", phone: "+1 (555) 234-5678", email: "david.lee@example.com" },
+];
+
+// Sample groups for demo
+const mockGroups: Group[] = [
+  { id: "1", name: "Customers", description: "All paying customers", members: 128 },
+  { id: "2", name: "Employees", description: "Internal staff members", members: 42 },
+  { id: "3", name: "Subscribers", description: "Newsletter subscribers", members: 2156 },
+  { id: "4", name: "VIP Clients", description: "Premium customers", members: 17 },
+];
+
 const AudioMessage = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -89,6 +106,11 @@ const AudioMessage = () => {
   const [activeTab, setActiveTab] = useState("my-audios");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  // Selected contacts/groups state
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
 
   // Form for audio message
   const form = useForm<MessageFormValues>({
@@ -97,6 +119,7 @@ const AudioMessage = () => {
       recipients: "",
       senderId: "",
       schedule: false,
+      recipientType: "direct",
     },
   });
 
@@ -112,10 +135,19 @@ const AudioMessage = () => {
       console.log("Sending audio message with data:", {
         ...data,
         audioFile: selectedAudio,
+        selectedContacts: data.recipientType === "contacts" ? selectedContacts : [],
+        selectedGroup: data.recipientType === "group" ? selectedGroup : null,
       });
       
-      // Format the recipients as comma-separated list for the API
-      const recipients = data.recipients.split(',').map(r => r.trim()).join(',');
+      // Format recipients based on type
+      let recipients = "";
+      if (data.recipientType === "direct") {
+        recipients = data.recipients;
+      } else if (data.recipientType === "contacts") {
+        recipients = selectedContacts.map(c => c.phone).join(',');
+      } else if (data.recipientType === "group" && selectedGroup) {
+        recipients = `Group: ${selectedGroup.name} (${selectedGroup.members} contacts)`;
+      }
       
       // Here we would call the API to send the audio message
       // For now, we'll simulate a successful send
@@ -123,11 +155,15 @@ const AudioMessage = () => {
       
       toast({
         title: "Audio message scheduled",
-        description: `Message will be delivered to ${recipients.split(',').length} recipient(s)`,
+        description: data.recipientType === "group" && selectedGroup 
+          ? `Message will be delivered to ${selectedGroup.members} contacts in ${selectedGroup.name}`
+          : `Message will be delivered to ${data.recipientType === "contacts" ? selectedContacts.length : recipients.split(',').length} recipient(s)`,
       });
       
       form.reset();
       setSelectedAudio(null);
+      setSelectedContacts([]);
+      setSelectedGroup(null);
     } catch (error) {
       console.error("Error sending audio message:", error);
       toast({
@@ -140,7 +176,7 @@ const AudioMessage = () => {
     }
   };
 
-  // Handle recording completion
+  // Handle recording completion - not actually implemented in this UI
   const handleRecordingComplete = (blob: Blob, duration: number, name: string) => {
     const newFile: AudioFile = {
       id: `rec-${Date.now()}`,
@@ -189,98 +225,153 @@ const AudioMessage = () => {
   const handleDialogChange = (open: boolean) => {
     setIsDialogOpen(open);
   };
+  
+  // Handle contacts selection
+  const handleContactsSelected = (contacts: Contact[]) => {
+    setSelectedContacts(contacts);
+    form.setValue("recipients", contacts.map(c => c.phone).join(", "));
+  };
+  
+  // Handle group selection
+  const handleGroupSelected = (group: Group) => {
+    setSelectedGroup(group);
+    form.setValue("recipients", `Group: ${group.name} (${group.members} contacts)`);
+  };
 
   return (
     <AppLayout title="Audio Messages" currentPath="/audio-message">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Audio selection panel */}
-        <Card className="col-span-1 md:col-span-1 p-6">
+        <Card className="col-span-1 md:col-span-1 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Audio Library</h2>
-            <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">Add New</Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px]">
-                <Tabs defaultValue="upload" value={activeTab} onValueChange={setActiveTab} className="w-full">
-                  <TabsList className="grid grid-cols-3 mb-6">
-                    <TabsTrigger value="upload">Upload</TabsTrigger>
-                    <TabsTrigger value="record">Record</TabsTrigger>
-                    <TabsTrigger value="tts">Text to Speech</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="upload">
-                    <Card className="p-6">
-                      <h3 className="text-lg font-medium mb-4">Upload Audio File</h3>
-                      <div className="space-y-4">
-                        <div>
-                          <UploadButton onChange={(files) => console.log(files)} />
-                        </div>
-                      </div>
-                    </Card>
-                  </TabsContent>
-                  
-                  <TabsContent value="record">
-                    <Card className="p-6">
-                      <h3 className="text-lg font-medium mb-4">Record Audio</h3>
-                      <div className="flex flex-col items-center justify-center py-10">
-                        <RecordButton onRecordingComplete={handleRecordingComplete} />
-                        <p className="text-sm text-muted-foreground mt-4">
-                          Click to start/stop recording. Max duration: 5 minutes.
-                        </p>
-                      </div>
-                    </Card>
-                  </TabsContent>
-                  
-                  <TabsContent value="tts">
-                    <Card className="p-6">
-                      <h3 className="text-lg font-medium mb-4">Text to Speech Conversion</h3>
-                      <div className="space-y-4">
-                        <div>
-                          <TTSButton />
-                        </div>
-                      </div>
-                    </Card>
-                  </TabsContent>
-                </Tabs>
-              </DialogContent>
-            </Dialog>
+            <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(true)}>
+              Add New
+            </Button>
           </div>
           
           <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-            <AudioFileList 
-              files={audioFiles}
-              onSelect={handleSelectAudio}
-              onDelete={handleDeleteAudio}
-              selectedId={selectedAudio?.id}
-            />
+            {audioFiles.map(file => (
+              <div
+                key={file.id}
+                className={`p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                  selectedAudio?.id === file.id ? "bg-gray-100 dark:bg-gray-700 border-jaylink-500" : ""
+                }`}
+                onClick={() => handleSelectAudio(file)}
+              >
+                <div className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-gray-900 dark:text-white">{file.name}</span>
+                    <span className="text-sm text-gray-500">
+                      {file.duration} seconds • {file.type.toUpperCase()}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteAudio(file.id);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
         
         {/* Message form */}
-        <Card className="col-span-1 md:col-span-2 p-6">
+        <Card className="col-span-1 md:col-span-2 p-4 sm:p-6">
           <h2 className="text-lg font-semibold mb-4">Send Audio Message</h2>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
-                name="recipients"
+                name="recipientType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Recipients</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="2348030000000, 2348020000000" 
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Enter phone numbers separated by commas
-                    </FormDescription>
-                    <FormMessage />
+                    <FormLabel>Recipient Type</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Reset other fields
+                        if (value !== "contacts") setSelectedContacts([]);
+                        if (value !== "group") setSelectedGroup(null);
+                        if (value !== "direct") form.setValue("recipients", "");
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select how to add recipients" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="direct">Direct Entry</SelectItem>
+                        <SelectItem value="contacts">From Contacts</SelectItem>
+                        <SelectItem value="group">From Group</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </FormItem>
                 )}
               />
+
+              {form.watch("recipientType") === "direct" && (
+                <FormField
+                  control={form.control}
+                  name="recipients"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Recipients</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="2348030000000, 2348020000000" 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Enter phone numbers separated by commas
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              
+              {form.watch("recipientType") === "contacts" && (
+                <div className="space-y-2">
+                  <FormLabel>Select Contacts</FormLabel>
+                  <ContactSelector 
+                    contacts={mockContacts}
+                    onContactsSelected={handleContactsSelected}
+                    buttonText={selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}
+                  />
+                  {selectedContacts.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {selectedContacts.length} contact(s) selected
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              {form.watch("recipientType") === "group" && (
+                <div className="space-y-2">
+                  <FormLabel>Select Group</FormLabel>
+                  <GroupSelector
+                    groups={mockGroups}
+                    onGroupSelected={handleGroupSelected}
+                    buttonText={selectedGroup ? selectedGroup.name : "Select Group"}
+                  />
+                  {selectedGroup && (
+                    <p className="text-sm text-muted-foreground">
+                      Group with {selectedGroup.members} member(s)
+                    </p>
+                  )}
+                </div>
+              )}
               
               <FormField
                 control={form.control}
@@ -288,12 +379,21 @@ const AudioMessage = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Caller ID</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="Your phone number or company number" 
-                        {...field} 
-                      />
-                    </FormControl>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select caller ID" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="+2348012345678">+234 801 234 5678</SelectItem>
+                        <SelectItem value="+2348023456789">+234 802 345 6789</SelectItem>
+                        <SelectItem value="+2347034567890">+234 703 456 7890</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormDescription>
                       This will appear as the caller's phone number
                     </FormDescription>
@@ -360,7 +460,7 @@ const AudioMessage = () => {
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
-                              variant={"outline"}
+                              variant="outline"
                               className={cn(
                                 "w-full pl-3 text-left font-normal",
                                 !field.value && "text-muted-foreground"
@@ -421,6 +521,57 @@ const AudioMessage = () => {
           </Form>
         </Card>
       </div>
+
+      {/* Dialog for adding new audio (simplified) */}
+      <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
+        <DialogContent className={isMobile ? "w-[95vw] max-w-[95vw]" : "sm:max-w-[600px]"}>
+          <Tabs defaultValue="upload" className="w-full">
+            <TabsList className="grid grid-cols-3 mb-6">
+              <TabsTrigger value="upload">Upload</TabsTrigger>
+              <TabsTrigger value="record">Record</TabsTrigger>
+              <TabsTrigger value="tts">Text to Speech</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="upload">
+              <Card className="p-6">
+                <h3 className="text-lg font-medium mb-4">Upload Audio File</h3>
+                <div className="mt-1 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
+                  <div className="space-y-2 text-center">
+                    <div className="text-center">
+                      <p className="text-muted-foreground mb-2">Upload file feature</p>
+                      <p className="text-sm">This feature is available in the full version</p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="record">
+              <Card className="p-6">
+                <h3 className="text-lg font-medium mb-4">Record Audio</h3>
+                <div className="flex flex-col items-center justify-center py-10">
+                  <div className="text-center">
+                    <p className="text-muted-foreground mb-2">Record audio feature</p>
+                    <p className="text-sm">This feature is available in the full version</p>
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="tts">
+              <Card className="p-6">
+                <h3 className="text-lg font-medium mb-4">Text to Speech Conversion</h3>
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <p className="text-muted-foreground mb-2">Text to speech feature</p>
+                    <p className="text-sm">This feature is available in the full version</p>
+                  </div>
+                </div>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

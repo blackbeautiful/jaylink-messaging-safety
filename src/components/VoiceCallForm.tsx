@@ -23,6 +23,25 @@ import {
 } from "@/components/ui/card";
 import { Loader2, Phone, Mic, FileText, Calendar } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { useIsMobile } from "@/hooks/use-mobile";
+import ContactSelector, { Contact } from "./contacts/ContactSelector";
+import GroupSelector, { Group } from "./groups/GroupSelector";
+
+// Mock data for development
+const mockContacts = [
+  { id: "1", name: "John Smith", phone: "+1 (555) 123-4567", email: "john.smith@example.com" },
+  { id: "2", name: "Sarah Johnson", phone: "+1 (555) 987-6543", email: "sarah.j@example.com" },
+  { id: "3", name: "Michael Brown", phone: "+1 (555) 456-7890", email: "michael.b@example.com" },
+  { id: "4", name: "Emma Wilson", phone: "+1 (555) 789-0123", email: "emma.w@example.com" },
+  { id: "5", name: "David Lee", phone: "+1 (555) 234-5678", email: "david.lee@example.com" },
+];
+
+const mockGroups = [
+  { id: "1", name: "Customers", description: "All paying customers", members: 128 },
+  { id: "2", name: "Employees", description: "Internal staff members", members: 42 },
+  { id: "3", name: "Subscribers", description: "Newsletter subscribers", members: 2156 },
+  { id: "4", name: "VIP Clients", description: "Premium customers", members: 17 },
+];
 
 const VoiceCallForm = () => {
   const [loading, setLoading] = useState(false);
@@ -32,8 +51,14 @@ const VoiceCallForm = () => {
   const [scheduledDate, setScheduledDate] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
+  
+  // Selected contacts/groups state
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   
   const [formData, setFormData] = useState({
+    recipientType: "direct", // "direct", "contacts", "group"
     recipients: "",
     message: "",
     callerID: "",
@@ -66,6 +91,28 @@ const VoiceCallForm = () => {
         audioFile: e.target.files[0],
       });
     }
+  };
+  
+  const handleContactsSelected = (contacts: Contact[]) => {
+    setSelectedContacts(contacts);
+    // Join phone numbers with commas
+    const phoneNumbers = contacts.map(c => c.phone).join(", ");
+    setFormData({
+      ...formData,
+      recipientType: "contacts",
+      recipients: phoneNumbers,
+      recipientCount: contacts.length,
+    });
+  };
+  
+  const handleGroupSelected = (group: Group) => {
+    setSelectedGroup(group);
+    setFormData({
+      ...formData,
+      recipientType: "group",
+      recipients: `Group: ${group.name}`,
+      recipientCount: group.members,
+    });
   };
 
   const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,7 +156,7 @@ const VoiceCallForm = () => {
       return;
     }
 
-    if (!bulkMode && !formData.recipients) {
+    if (!bulkMode && !formData.recipients && formData.recipientType === "direct") {
       toast.error("Please enter at least one recipient");
       setLoading(false);
       return;
@@ -128,6 +175,7 @@ const VoiceCallForm = () => {
       
       // Reset form
       setFormData({
+        recipientType: "direct",
         recipients: "",
         message: "",
         callerID: "",
@@ -140,6 +188,8 @@ const VoiceCallForm = () => {
       if (csvInputRef.current) csvInputRef.current.value = "";
       setScheduledCall(false);
       setScheduledDate("");
+      setSelectedContacts([]);
+      setSelectedGroup(null);
     }, 1500);
   };
 
@@ -148,9 +198,9 @@ const VoiceCallForm = () => {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle"
+      className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-subtle"
     >
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
           Make Voice Call
         </h2>
@@ -218,20 +268,75 @@ const VoiceCallForm = () => {
                 </CardContent>
               </Card>
             ) : (
-              <div>
-                <Label htmlFor="recipients">Recipients</Label>
-                <Input
-                  id="recipients"
-                  name="recipients"
-                  placeholder="Enter phone numbers separated by commas"
-                  value={formData.recipients}
-                  onChange={handleInputChange}
-                  required={!bulkMode}
-                  className="mt-1"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Format: +234800123456, +234800123457
-                </p>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="recipientType">Recipient Type</Label>
+                  <Select 
+                    value={formData.recipientType} 
+                    onValueChange={(value) => handleSelectChange("recipientType", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select recipient type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="direct">Direct Entry</SelectItem>
+                      <SelectItem value="contacts">From Contacts</SelectItem>
+                      <SelectItem value="group">From Group</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {formData.recipientType === "direct" && (
+                  <div>
+                    <Label htmlFor="recipients">Recipients</Label>
+                    <Input
+                      id="recipients"
+                      name="recipients"
+                      placeholder="Enter phone numbers separated by commas"
+                      value={formData.recipients}
+                      onChange={handleInputChange}
+                      required={!bulkMode && formData.recipientType === "direct"}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Format: +234800123456, +234800123457
+                    </p>
+                  </div>
+                )}
+
+                {formData.recipientType === "contacts" && (
+                  <div className="space-y-2">
+                    <Label>Select Contacts</Label>
+                    <ContactSelector 
+                      contacts={mockContacts} 
+                      onContactsSelected={handleContactsSelected}
+                      buttonText={selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}
+                    />
+                    
+                    {selectedContacts.length > 0 && (
+                      <div className="text-sm text-muted-foreground">
+                        Selected {selectedContacts.length} contact(s)
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {formData.recipientType === "group" && (
+                  <div className="space-y-2">
+                    <Label>Select Group</Label>
+                    <GroupSelector 
+                      groups={mockGroups} 
+                      onGroupSelected={handleGroupSelected}
+                      buttonText={selectedGroup ? selectedGroup.name : "Select Group"}
+                    />
+                    
+                    {selectedGroup && (
+                      <div className="text-sm text-muted-foreground">
+                        Group with {selectedGroup.members} member(s)
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -277,7 +382,7 @@ const VoiceCallForm = () => {
                 <div className="mt-1 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
                   <div className="space-y-2 text-center">
                     <Mic className="mx-auto h-12 w-12 text-gray-400" />
-                    <div className="flex text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex flex-wrap justify-center text-sm text-gray-600 dark:text-gray-400">
                       <label
                         htmlFor="audioFile"
                         className="relative cursor-pointer rounded-md font-medium text-jaylink-600 hover:text-jaylink-700"

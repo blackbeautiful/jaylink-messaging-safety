@@ -11,16 +11,12 @@ import ContactList from "@/components/groups/ContactList";
 import AddGroupButton from "@/components/groups/AddGroupButton";
 import AddContactButton from "@/components/groups/AddContactButton";
 import ImportButton from "@/components/groups/ImportButton";
+import ContactSelector, { Contact } from "@/components/contacts/ContactSelector";
+import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Group } from "@/components/groups/GroupSelector";
 
-interface Contact {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  added: string;
-}
-
-interface Group {
+interface GroupData {
   id: string;
   name: string;
   description: string;
@@ -28,7 +24,7 @@ interface Group {
   created: string;
 }
 
-const mockGroups: Group[] = [
+const mockGroups: GroupData[] = [
   {
     id: "1",
     name: "Customers",
@@ -72,35 +68,30 @@ const mockContacts: Contact[] = [
     name: "John Smith",
     phone: "+1 (555) 123-4567",
     email: "john.smith@example.com",
-    added: "2023-05-15",
   },
   {
     id: "2",
     name: "Sarah Johnson",
     phone: "+1 (555) 987-6543",
     email: "sarah.j@example.com",
-    added: "2023-06-10",
   },
   {
     id: "3",
     name: "Michael Brown",
     phone: "+1 (555) 456-7890",
     email: "michael.b@example.com",
-    added: "2023-06-15",
   },
   {
     id: "4",
     name: "Emma Wilson",
     phone: "+1 (555) 789-0123",
     email: "emma.w@example.com",
-    added: "2023-07-01",
   },
   {
     id: "5",
     name: "David Lee",
     phone: "+1 (555) 234-5678",
     email: "david.lee@example.com",
-    added: "2023-07-12",
   },
 ];
 
@@ -109,9 +100,12 @@ const Groups = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const [groups, setGroups] = useState<Group[]>(mockGroups);
+  const [groups, setGroups] = useState<GroupData[]>(mockGroups);
   const [contacts, setContacts] = useState<Contact[]>(mockContacts);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [isAddingContactsToGroup, setIsAddingContactsToGroup] = useState(false);
+  const isMobile = useIsMobile();
 
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -121,7 +115,7 @@ const Groups = () => {
   const filteredContacts = contacts.filter(contact => 
     contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     contact.phone.includes(searchTerm) ||
-    contact.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (contact.email && contact.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleAddGroup = (name: string, description: string) => {
@@ -130,7 +124,7 @@ const Groups = () => {
       return;
     }
 
-    const newGroup: Group = {
+    const newGroup: GroupData = {
       id: Date.now().toString(),
       name,
       description,
@@ -158,7 +152,6 @@ const Groups = () => {
       name,
       phone,
       email,
-      added: new Date().toISOString().split("T")[0],
     };
 
     setContacts([...contacts, newContact]);
@@ -184,6 +177,33 @@ const Groups = () => {
     }, 2000);
   };
 
+  const handleContactsSelected = (selectedContacts: Contact[]) => {
+    if (selectedGroupId) {
+      const groupToUpdate = groups.find(g => g.id === selectedGroupId);
+      
+      if (groupToUpdate) {
+        // In a real app, we would have a many-to-many relationship for contacts in groups
+        // For now, we'll just update the count
+        const updatedGroups = groups.map(g => {
+          if (g.id === selectedGroupId) {
+            return { ...g, members: g.members + selectedContacts.length };
+          }
+          return g;
+        });
+        
+        setGroups(updatedGroups);
+        toast(`Added ${selectedContacts.length} contacts to "${groupToUpdate.name}" group`);
+        setIsAddingContactsToGroup(false);
+        setSelectedGroupId(null);
+      }
+    }
+  };
+
+  const handleAddToGroup = (groupId: string) => {
+    setSelectedGroupId(groupId);
+    setIsAddingContactsToGroup(true);
+  };
+
   return (
     <DashboardLayout title="Contact Groups" backLink="/dashboard">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
@@ -204,6 +224,36 @@ const Groups = () => {
               <ImportButton onImport={handleImportContacts} />
             </div>
           </div>
+          
+          {/* Contacts selection for adding to group */}
+          {isAddingContactsToGroup && selectedGroupId && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Add Contacts to Group</CardTitle>
+                <CardDescription>
+                  Select contacts to add to {groups.find(g => g.id === selectedGroupId)?.name}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ContactSelector
+                  contacts={contacts}
+                  onContactsSelected={handleContactsSelected}
+                  buttonText="Select Contacts to Add"
+                />
+                <div className="mt-4 flex justify-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsAddingContactsToGroup(false);
+                      setSelectedGroupId(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           
           {/* Tabs for groups and contacts */}
           <Tabs defaultValue="groups" className="w-full">
@@ -227,7 +277,8 @@ const Groups = () => {
                 <CardContent>
                   <GroupList 
                     groups={filteredGroups} 
-                    onDeleteGroup={handleDeleteGroup} 
+                    onDeleteGroup={handleDeleteGroup}
+                    onAddContacts={handleAddToGroup}
                   />
                 </CardContent>
               </Card>

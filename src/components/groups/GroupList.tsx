@@ -11,13 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Edit, Trash2, MoreVertical, Download, Users } from "lucide-react";
+import { Edit, Trash2, MoreVertical, Download, Users, UserPlus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Group {
   id: string;
@@ -30,9 +31,12 @@ interface Group {
 interface GroupListProps {
   groups: Group[];
   onDeleteGroup: (id: string) => void;
+  onAddContacts?: (id: string) => void;
 }
 
-const GroupList = ({ groups, onDeleteGroup }: GroupListProps) => {
+const GroupList = ({ groups, onDeleteGroup, onAddContacts }: GroupListProps) => {
+  const isMobile = useIsMobile();
+
   return (
     <div className="border rounded-md overflow-hidden">
       <ScrollArea className="h-[400px] md:h-auto w-full">
@@ -67,28 +71,64 @@ const GroupList = ({ groups, onDeleteGroup }: GroupListProps) => {
                     <TableCell className="text-center">{group.members}</TableCell>
                     <TableCell className="hidden sm:table-cell">{group.created}</TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                            <span className="sr-only">Actions</span>
+                      {isMobile ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                              <span className="sr-only">Actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Group
+                            </DropdownMenuItem>
+                            {onAddContacts && (
+                              <DropdownMenuItem onClick={() => onAddContacts(group.id)}>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Add Contacts
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem>
+                              <Download className="mr-2 h-4 w-4" />
+                              Export Contacts
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onDeleteGroup(group.id)} className="text-red-600">
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Group
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <div className="flex justify-end space-x-1">
+                          <Button variant="ghost" size="icon" title="Edit Group">
+                            <Edit className="h-4 w-4" />
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit Group
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Download className="mr-2 h-4 w-4" />
-                            Export Contacts
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onDeleteGroup(group.id)} className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete Group
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                          {onAddContacts && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              title="Add Contacts"
+                              onClick={() => onAddContacts(group.id)}
+                            >
+                              <UserPlus className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" title="Export Contacts">
+                            <Download className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            title="Delete Group"
+                            onClick={() => onDeleteGroup(group.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

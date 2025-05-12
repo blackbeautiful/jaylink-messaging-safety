@@ -4,12 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import RecordDialog from "./RecordDialog";
+import { RecordButtonProps } from "./RecordButtonProps";
 
-interface RecordButtonProps {
-  onSaveRecording: (name: string, duration: number) => void;
-}
-
-const RecordButton = ({ onSaveRecording }: RecordButtonProps) => {
+const RecordButton = ({ onRecordingComplete, onSaveRecording }: RecordButtonProps) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -24,6 +21,7 @@ const RecordButton = ({ onSaveRecording }: RecordButtonProps) => {
         open={open}
         onOpenChange={setOpen}
         onSaveRecording={onSaveRecording}
+        onRecordingComplete={onRecordingComplete}
       />
     </Dialog>
   );

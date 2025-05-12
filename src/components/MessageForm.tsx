@@ -139,7 +139,7 @@ const MessageForm = () => {
         recipients = `group_${selectedGroup.id}`;
       }
 
-      // Call the API
+      // Call the API with proper arguments
       await smsApiService.sendSMS({
         recipients,
         message: formData.message,

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -225,6 +224,18 @@ const AudioUploadForm = () => {
     setIsDialogOpen(open);
   };
 
+  // Handle file change for UploadButton
+  const handleFileChange = (files: File[]) => {
+    if (files && files.length > 0) {
+      const file = files[0];
+      uploadForm.setValue("file", {
+        0: file,
+        length: 1,
+        item: (index: number) => file,
+      } as unknown as FileList);
+    }
+  };
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -290,7 +301,7 @@ const AudioUploadForm = () => {
                           <FormItem>
                             <FormLabel>File</FormLabel>
                             <FormControl>
-                              <UploadButton onChange={onChange} />
+                              <UploadButton onChange={handleFileChange} />
                             </FormControl>
                             <FormDescription>
                               Upload MP3 or WAV files (max 10MB)

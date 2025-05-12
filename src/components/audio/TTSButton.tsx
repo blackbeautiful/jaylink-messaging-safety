@@ -4,10 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MessageSquare } from "lucide-react";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import TTSDialog from "./TTSDialog";
-
-interface TTSButtonProps {
-  onCreateTTS: (name: string, text: string) => void;
-}
+import { TTSButtonProps } from "./TTSButtonProps";
 
 const TTSButton = ({ onCreateTTS }: TTSButtonProps) => {
   const [open, setOpen] = useState(false);

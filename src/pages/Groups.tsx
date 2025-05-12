@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -11,10 +10,15 @@ import ContactList from "@/components/groups/ContactList";
 import AddGroupButton from "@/components/groups/AddGroupButton";
 import AddContactButton from "@/components/groups/AddContactButton";
 import ImportButton from "@/components/groups/ImportButton";
-import ContactSelector, { Contact } from "@/components/contacts/ContactSelector";
+import ContactSelector, { Contact as SelectorContact } from "@/components/contacts/ContactSelector";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Group } from "@/components/groups/GroupSelector";
+
+// Define a compatible Contact interface for use in this component
+interface Contact extends SelectorContact {
+  added?: boolean;
+}
 
 interface GroupData {
   id: string;
@@ -177,11 +181,14 @@ const Groups = () => {
     }, 2000);
   };
 
-  const handleContactsSelected = (selectedContacts: Contact[]) => {
+  const handleContactsSelected = (selectedContacts: SelectorContact[]) => {
     if (selectedGroupId) {
       const groupToUpdate = groups.find(g => g.id === selectedGroupId);
       
       if (groupToUpdate) {
+        // Mark these contacts as added for the UI
+        const contactsWithAdded = selectedContacts.map(c => ({ ...c, added: true }));
+        
         // In a real app, we would have a many-to-many relationship for contacts in groups
         // For now, we'll just update the count
         const updatedGroups = groups.map(g => {

@@ -9,7 +9,7 @@ const SendSMS = () => {
   }, []);
 
   return (
-    <DashboardLayout title="Send Messages" currentPath="/send-sms">
+    <DashboardLayout title="Send Messages" backLink="/dashboard">
       <div className="max-w-3xl mx-auto">
         <MessageForm />
       </div>

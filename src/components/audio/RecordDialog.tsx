@@ -16,10 +16,11 @@ import {
 interface RecordDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaveRecording: (name: string, duration: number) => void;
+  onSaveRecording?: (name: string, duration: number) => void;
+  onRecordingComplete?: (blob: Blob, duration: number, name: string) => void;
 }
 
-const RecordDialog = ({ open, onOpenChange, onSaveRecording }: RecordDialogProps) => {
+const RecordDialog = ({ open, onOpenChange, onSaveRecording, onRecordingComplete }: RecordDialogProps) => {
   const [audioName, setAudioName] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -45,7 +46,16 @@ const RecordDialog = ({ open, onOpenChange, onSaveRecording }: RecordDialogProps
     if (isRecording) {
       setIsRecording(false);
       if (audioName) {
-        onSaveRecording(audioName, recordingTime);
+        if (onSaveRecording) {
+          onSaveRecording(audioName, recordingTime);
+        }
+        
+        // This is a mock implementation since we don't have actual recording functionality
+        // In a real app, this would create a Blob from the recorded audio
+        if (onRecordingComplete) {
+          const mockBlob = new Blob(["dummy-audio-data"], { type: "audio/wav" });
+          onRecordingComplete(mockBlob, recordingTime, audioName);
+        }
       }
     }
   };

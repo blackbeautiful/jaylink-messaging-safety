@@ -1,8 +1,29 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { wpApiService } from '@/utils/apiService';
-import { WPAuthResponse, WPUser } from '@/types/wordpress';
 import { toast } from '@/hooks/use-toast';
+import { WPUser } from '@/types/wordpress';
+
+// Mock API service for now - we'll replace with real API calls later
+const wpApiService = {
+  login: async (username: string, password: string) => {
+    // Simulate successful login
+    return {
+      token: 'sample-token',
+      user_display_name: 'John Doe',
+      user_email: 'john@example.com',
+      user_nicename: 'johndoe'
+    };
+  },
+  getCurrentUser: async () => {
+    // Return mock user data
+    return {
+      id: '1',
+      name: 'John Doe',
+      email: 'john@example.com',
+      role: 'administrator'
+    };
+  }
+};
 
 interface AuthContextType {
   isAuthenticated: boolean;

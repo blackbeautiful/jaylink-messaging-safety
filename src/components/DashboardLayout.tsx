@@ -33,10 +33,12 @@ import {
 } from "lucide-react";
 import LogoImg from "@/assets/logo.svg";
 
+// We need to update the interface for DashboardLayout props
 interface DashboardLayoutProps {
   children: ReactNode;
   title: string;
   backLink?: string;
+  currentPath?: string; // Add this prop to fix the error
 }
 
 interface Notification {
@@ -47,9 +49,8 @@ interface Notification {
   read: boolean;
 }
 
-const DashboardLayout = ({ children, title, backLink }: DashboardLayoutProps) => {
+const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLayoutProps) => {
   const location = useLocation();
-  const currentPath = location.pathname;
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

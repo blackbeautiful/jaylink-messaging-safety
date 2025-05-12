@@ -9,7 +9,7 @@ const Settings = () => {
   }, []);
 
   return (
-    <DashboardLayout title="Settings" currentPath="/settings">
+    <DashboardLayout title="Settings" backLink="/dashboard">
       <div className="max-w-4xl mx-auto">
         <SettingsForm />
       </div>

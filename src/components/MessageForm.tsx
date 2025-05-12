@@ -73,6 +73,12 @@ const MessageForm = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    
+    // Limit senderId to 11 characters
+    if (name === "senderId" && value.length > 11) {
+      return;
+    }
+    
     setFormData({
       ...formData,
       [name]: value,
@@ -217,19 +223,18 @@ const MessageForm = () => {
 
             <div className="space-y-1">
               <Label htmlFor="senderId">Sender ID</Label>
-              <Select
+              <Input
+                id="senderId"
+                name="senderId"
+                placeholder="Enter Sender ID (max 11 characters)"
                 value={formData.senderId}
-                onValueChange={(value) => handleSelectChange("senderId", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select sender ID" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="JAYLINK">JAYLINK</SelectItem>
-                  <SelectItem value="COMPANY">COMPANY</SelectItem>
-                  <SelectItem value="INFO">INFO</SelectItem>
-                </SelectContent>
-              </Select>
+                onChange={handleInputChange}
+                className="mt-1"
+                maxLength={11}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Maximum 11 characters
+              </p>
             </div>
           </div>
 

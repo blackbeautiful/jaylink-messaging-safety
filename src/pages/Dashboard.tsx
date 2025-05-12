@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -236,7 +235,7 @@ const Dashboard = () => {
                 </table>
               </div>
               <div className="mt-4 flex justify-center">
-                <Link to="/messages">
+                <Link to="/balance">
                   <Button variant="outline" className="border-jaylink-200 text-jaylink-700 hover:bg-jaylink-50">
                     View All Messages
                   </Button>

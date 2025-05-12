@@ -1,7 +1,7 @@
 
 import { useEffect } from "react";
 import MessageForm from "@/components/MessageForm";
-import AppLayout from "@/components/layout/AppLayout";
+import DashboardLayout from "@/components/DashboardLayout";
 
 const SendSMS = () => {
   useEffect(() => {
@@ -9,9 +9,11 @@ const SendSMS = () => {
   }, []);
 
   return (
-    <AppLayout title="Send Messages" currentPath="/send-sms">
-      <MessageForm />
-    </AppLayout>
+    <DashboardLayout title="Send Messages" currentPath="/send-sms">
+      <div className="max-w-3xl mx-auto">
+        <MessageForm />
+      </div>
+    </DashboardLayout>
   );
 };
 

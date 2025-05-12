@@ -1,154 +1,148 @@
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { toast } from '@/hooks/use-toast';
-import { WPUser } from '@/types/wordpress';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { smsApiService } from "@/utils/apiService";
 
-// Mock API service for now - we'll replace with real API calls later
+// Mock wpApiService since it doesn't exist in the codebase
 const wpApiService = {
   login: async (username: string, password: string) => {
-    // Simulate successful login
+    // Simulate API call
     return {
-      token: 'sample-token',
-      user_display_name: 'John Doe',
-      user_email: 'john@example.com',
-      user_nicename: 'johndoe'
+      id: "1",
+      name: "John Doe",
+      email: "john@example.com",
+      role: "administrator"
     };
   },
-  getCurrentUser: async () => {
-    // Return mock user data
+  register: async (username: string, email: string, password: string) => {
+    // Simulate API call
     return {
-      id: '1',
-      name: 'John Doe',
-      email: 'john@example.com',
-      role: 'administrator'
+      id: "1",
+      name: username,
+      email: email,
+      role: "subscriber"
+    };
+  },
+  forgotPassword: async (email: string) => {
+    // Simulate API call
+    return true;
+  },
+  validateToken: async () => {
+    // Simulate API call
+    return {
+      id: "1",
+      name: "John Doe",
+      email: "john@example.com",
+      role: "administrator"
     };
   }
 };
 
-interface AuthContextType {
-  isAuthenticated: boolean;
-  user: WPUser | null;
-  token: string | null;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  loading: boolean;
+// Define WPUser type to match the mock data
+interface WPUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  url?: string;
+  description?: string;
+  link?: string;
+  slug?: string;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthContextType {
+  user: WPUser | null;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
+  logout: () => void;
+  loading: boolean;
+  forgotPassword: (email: string) => Promise<boolean>;
+}
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<WPUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  // Check for existing authentication on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem('wp_token');
-    
-    if (storedToken) {
-      // Validate the token and get user data
-      setToken(storedToken);
-      setIsAuthenticated(true);
-      
-      const fetchUser = async () => {
-        try {
-          const userData = await wpApiService.getCurrentUser();
-          if (userData) {
-            setUser(userData as WPUser);
-          } else {
-            // Token might be invalid or expired
-            handleLogout();
-          }
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-          handleLogout();
-        } finally {
-          setLoading(false);
-        }
-      };
-      
-      fetchUser();
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleLogin = async (username: string, password: string) => {
-    try {
-      setLoading(true);
-      const authResponse = await wpApiService.login(username, password);
-      
-      if (authResponse && 'token' in authResponse) {
-        // Save the token and set user as authenticated
-        const { token, user_display_name, user_email, user_nicename } = authResponse;
-        
-        localStorage.setItem('wp_token', token);
-        setToken(token);
-        setIsAuthenticated(true);
-        
-        // Fetch additional user data if needed
-        const userData = await wpApiService.getCurrentUser();
-        if (userData) {
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (token) {
+          const userData = await wpApiService.validateToken();
           setUser(userData as WPUser);
         }
-        
-        toast({
-          title: "Login successful",
-          description: `Welcome, ${user_display_name || user_nicename}!`,
-        });
-        
-        return true;
+      } catch (error) {
+        console.error("Auth validation error:", error);
+        localStorage.removeItem("token");
+      } finally {
+        setLoading(false);
       }
-      
-      throw new Error('Authentication failed');
+    };
+
+    checkAuth();
+  }, []);
+
+  const login = async (username: string, password: string) => {
+    setLoading(true);
+    try {
+      const userData = await wpApiService.login(username, password);
+      localStorage.setItem("token", "mock-token-value");
+      setUser(userData as WPUser);
+      navigate("/dashboard");
     } catch (error) {
-      console.error('Login error:', error);
-      toast({
-        variant: "destructive",
-        title: "Login failed",
-        description: "Invalid username or password. Please try again.",
-      });
-      return false;
+      console.error("Login error:", error);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('wp_token');
-    setToken(null);
+  const register = async (username: string, email: string, password: string) => {
+    setLoading(true);
+    try {
+      const userData = await wpApiService.register(username, email, password);
+      localStorage.setItem("token", "mock-token-value");
+      setUser(userData as WPUser);
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Registration error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("token");
     setUser(null);
-    setIsAuthenticated(false);
-    
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out.",
-    });
+    navigate("/login");
+  };
+
+  const forgotPassword = async (email: string) => {
+    try {
+      return await wpApiService.forgotPassword(email);
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      throw error;
+    }
   };
 
   return (
     <AuthContext.Provider
-      value={{
-        isAuthenticated,
-        user,
-        token,
-        login: handleLogin,
-        logout: handleLogout,
-        loading
-      }}
+      value={{ user, login, register, logout, loading, forgotPassword }}
     >
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  
-  return context;
 };

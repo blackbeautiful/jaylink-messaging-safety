@@ -26,6 +26,15 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Loader2, Send, Calendar, UsersRound } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -54,6 +63,8 @@ const MessageForm = () => {
   const [bulkMode, setBulkMode] = useState(false);
   const [scheduledMessage, setScheduledMessage] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
+  const [openContactsDialog, setOpenContactsDialog] = useState(false);
+  const [openGroupsDialog, setOpenGroupsDialog] = useState(false);
   const isMobile = useIsMobile();
   
   // Selected contacts/groups state
@@ -102,6 +113,7 @@ const MessageForm = () => {
       recipients: phoneNumbers,
       recipientCount: contacts.length,
     });
+    setOpenContactsDialog(false);
   };
   
   const handleGroupSelected = (group: Group) => {
@@ -112,6 +124,7 @@ const MessageForm = () => {
       recipients: `Group: ${group.name}`,
       recipientCount: group.members,
     });
+    setOpenGroupsDialog(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -258,11 +271,27 @@ const MessageForm = () => {
           {formData.recipientType === "contacts" && (
             <div className="space-y-2">
               <Label>Select Contacts</Label>
-              <ContactSelector 
-                contacts={mockContacts} 
-                onContactsSelected={handleContactsSelected}
-                buttonText={selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}
-              />
+              <Dialog open={openContactsDialog} onOpenChange={setOpenContactsDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full flex justify-between items-center">
+                    <span>{selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}</span>
+                    <UsersRound className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Select Contacts</DialogTitle>
+                    <DialogDescription>
+                      Choose contacts to send your message to
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ContactSelector 
+                    contacts={mockContacts} 
+                    onContactsSelected={handleContactsSelected}
+                    buttonText="Confirm Selection"
+                  />
+                </DialogContent>
+              </Dialog>
               
               {selectedContacts.length > 0 && (
                 <div className="text-sm text-muted-foreground">
@@ -275,11 +304,27 @@ const MessageForm = () => {
           {formData.recipientType === "group" && (
             <div className="space-y-2">
               <Label>Select Group</Label>
-              <GroupSelector 
-                groups={mockGroups} 
-                onGroupSelected={handleGroupSelected}
-                buttonText={selectedGroup ? selectedGroup.name : "Select Group"}
-              />
+              <Dialog open={openGroupsDialog} onOpenChange={setOpenGroupsDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="w-full flex justify-between items-center">
+                    <span>{selectedGroup ? selectedGroup.name : "Select Group"}</span>
+                    <UsersRound className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Select Group</DialogTitle>
+                    <DialogDescription>
+                      Choose a contact group for bulk messaging
+                    </DialogDescription>
+                  </DialogHeader>
+                  <GroupSelector 
+                    groups={mockGroups} 
+                    onGroupSelected={handleGroupSelected}
+                    buttonText="Select Group"
+                  />
+                </DialogContent>
+              </Dialog>
               
               {selectedGroup && (
                 <div className="text-sm text-muted-foreground">

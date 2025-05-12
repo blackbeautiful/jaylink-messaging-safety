@@ -6,7 +6,7 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import RecordDialog from "./RecordDialog";
 import { RecordButtonProps } from "./RecordButtonProps";
 
-const RecordButton = ({ onRecordingComplete, onSaveRecording }: RecordButtonProps) => {
+const RecordButton = ({ onRecordingComplete }: RecordButtonProps) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -20,7 +20,6 @@ const RecordButton = ({ onRecordingComplete, onSaveRecording }: RecordButtonProp
       <RecordDialog
         open={open}
         onOpenChange={setOpen}
-        onSaveRecording={onSaveRecording}
         onRecordingComplete={onRecordingComplete}
       />
     </Dialog>

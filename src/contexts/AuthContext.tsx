@@ -52,6 +52,7 @@ interface WPUser {
 
 interface AuthContextType {
   user: WPUser | null;
+  isAuthenticated: boolean; // Add the isAuthenticated property
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -73,6 +74,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<WPUser | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  // Compute isAuthenticated based on user state
+  const isAuthenticated = !!user;
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -140,7 +144,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, login, register, logout, loading, forgotPassword }}
+      value={{ user, isAuthenticated, login, register, logout, loading, forgotPassword }}
     >
       {children}
     </AuthContext.Provider>

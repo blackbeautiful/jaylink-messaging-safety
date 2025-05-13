@@ -1,6 +1,7 @@
 
 import { Navigate, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { toast } from "@/hooks/use-toast";
 
 const AdminRoute = () => {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -18,6 +19,11 @@ const AdminRoute = () => {
       } catch (error) {
         console.error("Error checking admin status:", error);
         setIsAdmin(false);
+        toast({
+          variant: "destructive",
+          title: "Authentication Error",
+          description: "Could not verify admin privileges.",
+        });
       } finally {
         setLoading(false);
       }
@@ -30,7 +36,7 @@ const AdminRoute = () => {
     return <div className="flex items-center justify-center min-h-screen">Loading admin verification...</div>;
   }
 
-  return isAdmin ? <Outlet /> : <Navigate to="/admin/login" />;
+  return isAdmin ? <Outlet /> : <Navigate to="/jayadminlink/login" />;
 };
 
 export default AdminRoute;

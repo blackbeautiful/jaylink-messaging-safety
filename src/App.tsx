@@ -30,6 +30,7 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminRoute from "./components/admin/AdminRoute";
+import AdminUserManagement from "./pages/admin/AdminUserManagement";
 
 const queryClient = new QueryClient();
 
@@ -55,16 +56,17 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/upload-audio" element={<UploadAudio />} />
             
-            {/* Admin Routes */}
-            <Route path="/admin/login" element={<AdminLogin />} />
+            {/* Admin Routes - Changed from /admin to /jayadminlink */}
+            <Route path="/jayadminlink/login" element={<AdminLogin />} />
             <Route element={<AdminRoute />}>
-              <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-              <Route path="/admin/dashboard" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
-              <Route path="/admin/service-costs" element={<AdminLayout><AdminServiceCosts /></AdminLayout>} />
-              <Route path="/admin/balance-management" element={<AdminLayout><AdminBalanceManagement /></AdminLayout>} />
-              <Route path="/admin/transactions" element={<AdminLayout><AdminTransactions /></AdminLayout>} />
-              <Route path="/admin/analytics" element={<AdminLayout><AdminAnalytics /></AdminLayout>} />
-              <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
+              <Route path="/jayadminlink" element={<Navigate to="/jayadminlink/dashboard" replace />} />
+              <Route path="/jayadminlink/dashboard" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+              <Route path="/jayadminlink/service-costs" element={<AdminLayout><AdminServiceCosts /></AdminLayout>} />
+              <Route path="/jayadminlink/balance-management" element={<AdminLayout><AdminBalanceManagement /></AdminLayout>} />
+              <Route path="/jayadminlink/transactions" element={<AdminLayout><AdminTransactions /></AdminLayout>} />
+              <Route path="/jayadminlink/analytics" element={<AdminLayout><AdminAnalytics /></AdminLayout>} />
+              <Route path="/jayadminlink/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
+              <Route path="/jayadminlink/users" element={<AdminLayout><AdminUserManagement /></AdminLayout>} />
             </Route>
             
             {/* Redirect /login to the root path */}

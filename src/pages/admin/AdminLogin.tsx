@@ -59,7 +59,7 @@ const AdminLogin = () => {
           description: "You have successfully logged in as admin.",
         });
         
-        navigate("/admin/dashboard");
+        navigate("/jayadminlink/dashboard");
       } else {
         toast({
           variant: "destructive",

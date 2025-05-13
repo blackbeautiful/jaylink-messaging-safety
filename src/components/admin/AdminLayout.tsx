@@ -10,7 +10,7 @@ import {
   LogOut, 
   Settings, 
   User,
-  List
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -24,17 +24,18 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const currentPath = location.pathname;
 
   const sidebarLinks = [
-    { name: "Dashboard", icon: <Home size={20} />, path: "/admin/dashboard" },
-    { name: "Service Costs", icon: <DollarSign size={20} />, path: "/admin/service-costs" },
-    { name: "Balance Management", icon: <CreditCard size={20} />, path: "/admin/balance-management" },
-    { name: "Transactions", icon: <FileText size={20} />, path: "/admin/transactions" },
-    { name: "Analytics", icon: <BarChart3 size={20} />, path: "/admin/analytics" },
-    { name: "Settings", icon: <Settings size={20} />, path: "/admin/settings" },
+    { name: "Dashboard", icon: <Home size={20} />, path: "/jayadminlink/dashboard" },
+    { name: "User Management", icon: <Users size={20} />, path: "/jayadminlink/users" },
+    { name: "Service Costs", icon: <DollarSign size={20} />, path: "/jayadminlink/service-costs" },
+    { name: "Balance Management", icon: <CreditCard size={20} />, path: "/jayadminlink/balance-management" },
+    { name: "Transactions", icon: <FileText size={20} />, path: "/jayadminlink/transactions" },
+    { name: "Analytics", icon: <BarChart3 size={20} />, path: "/jayadminlink/analytics" },
+    { name: "Settings", icon: <Settings size={20} />, path: "/jayadminlink/settings" },
   ];
 
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
-    navigate("/admin/login");
+    navigate("/jayadminlink/login");
   };
 
   return (
@@ -42,7 +43,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       {/* Sidebar */}
       <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <Link to="/admin/dashboard" className="flex items-center space-x-2">
+          <Link to="/jayadminlink/dashboard" className="flex items-center space-x-2">
             <span className="font-bold text-xl text-jaylink-800 dark:text-white">
               Jay<span className="text-jaylink-600">Link</span> Admin
             </span>

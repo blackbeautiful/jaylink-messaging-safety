@@ -171,7 +171,8 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
   // Sign out handler
   const handleSignOut = () => {
     localStorage.removeItem('token');
-    window.location.href = '/';
+    toast.success('You have logged out successfully.');
+    navigate('/');
   };
 
   return (

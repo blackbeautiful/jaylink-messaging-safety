@@ -20,6 +20,17 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import UploadAudio from "./pages/UploadAudio";
 
+// Admin pages
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminServiceCosts from "./pages/admin/AdminServiceCosts";
+import AdminBalanceManagement from "./pages/admin/AdminBalanceManagement";
+import AdminTransactions from "./pages/admin/AdminTransactions";
+import AdminAnalytics from "./pages/admin/AdminAnalytics";
+import AdminSettings from "./pages/admin/AdminSettings";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminRoute from "./components/admin/AdminRoute";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -43,6 +54,19 @@ const App = () => (
             <Route path="/scheduled" element={<Scheduled />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/upload-audio" element={<UploadAudio />} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route element={<AdminRoute />}>
+              <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="/admin/dashboard" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+              <Route path="/admin/service-costs" element={<AdminLayout><AdminServiceCosts /></AdminLayout>} />
+              <Route path="/admin/balance-management" element={<AdminLayout><AdminBalanceManagement /></AdminLayout>} />
+              <Route path="/admin/transactions" element={<AdminLayout><AdminTransactions /></AdminLayout>} />
+              <Route path="/admin/analytics" element={<AdminLayout><AdminAnalytics /></AdminLayout>} />
+              <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
+            </Route>
+            
             {/* Redirect /login to the root path */}
             <Route path="/login" element={<Navigate to="/" replace />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   Table,
@@ -42,7 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Edit, MoreVertical, Search, Trash, UserPlus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -106,8 +105,8 @@ const AdminUserManagement = () => {
   ]);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterRole, setFilterRole] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterRole, setFilterRole] = useState<string>("all"); // Changed from empty string to "all"
+  const [filterStatus, setFilterStatus] = useState<string>("all"); // Changed from empty string to "all"
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isEditUserOpen, setIsEditUserOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -124,8 +123,8 @@ const AdminUserManagement = () => {
     const matchesSearch = 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = filterRole === "" || user.role === filterRole;
-    const matchesStatus = filterStatus === "" || user.status === filterStatus;
+    const matchesRole = filterRole === "all" || user.role === filterRole;
+    const matchesStatus = filterStatus === "all" || user.status === filterStatus;
     
     return matchesSearch && matchesRole && matchesStatus;
   });
@@ -133,20 +132,12 @@ const AdminUserManagement = () => {
   const handleAddUser = () => {
     // Validate form
     if (!newUser.name || !newUser.email || !newUser.password) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please fill in all required fields."
-      });
+      toast.error("Please fill in all required fields.");
       return;
     }
     
     if (newUser.password !== newUser.confirmPassword) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Passwords do not match."
-      });
+      toast.error("Passwords do not match.");
       return;
     }
     
@@ -176,10 +167,7 @@ const AdminUserManagement = () => {
       confirmPassword: ""
     });
     
-    toast({
-      title: "Success",
-      description: `User ${user.name} has been added successfully.`
-    });
+    toast.success(`User ${user.name} has been added successfully.`);
   };
 
   const handleEditUser = () => {
@@ -192,10 +180,7 @@ const AdminUserManagement = () => {
     setIsEditUserOpen(false);
     setCurrentUser(null);
     
-    toast({
-      title: "Success",
-      description: `User ${currentUser.name} has been updated successfully.`
-    });
+    toast.success(`User ${currentUser.name} has been updated successfully.`);
   };
 
   const handleDeleteUser = (id: string) => {
@@ -203,10 +188,7 @@ const AdminUserManagement = () => {
     
     setUsers(users.filter(user => user.id !== id));
     
-    toast({
-      title: "Success",
-      description: `User ${userToDelete?.name} has been deleted.`
-    });
+    toast.success(`User ${userToDelete?.name} has been deleted.`);
   };
 
   const handleEditClick = (user: User) => {
@@ -253,7 +235,7 @@ const AdminUserManagement = () => {
               <SelectValue placeholder="Role" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Roles</SelectItem>
+              <SelectItem value="all">All Roles</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
               <SelectItem value="user">User</SelectItem>
             </SelectContent>
@@ -264,7 +246,7 @@ const AdminUserManagement = () => {
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Status</SelectItem>
+              <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="suspended">Suspended</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
@@ -359,7 +341,7 @@ const AdminUserManagement = () => {
                 <Button variant="outline" onClick={() => setIsAddUserOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" onClick={handleAddUser}>
+                <Button type="button" onClick={handleAddUser}>
                   Create User
                 </Button>
               </DialogFooter>
@@ -540,7 +522,7 @@ const AdminUserManagement = () => {
             <Button variant="outline" onClick={() => setIsEditUserOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" onClick={handleEditUser}>
+            <Button type="button" onClick={handleEditUser}>
               Save Changes
             </Button>
           </DialogFooter>

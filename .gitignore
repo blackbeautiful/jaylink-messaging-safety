@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+write
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

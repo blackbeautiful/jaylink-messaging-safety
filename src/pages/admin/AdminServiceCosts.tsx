@@ -1,85 +1,79 @@
 
 import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DollarSign } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface ServiceCost {
   id: string;
   name: string;
-  cost: number;
   description: string;
+  cost: number;
+  unit: string;
 }
 
 const AdminServiceCosts = () => {
-  // Mock service costs data
   const [serviceCosts, setServiceCosts] = useState<ServiceCost[]>([
     {
-      id: "sms",
+      id: "1",
       name: "SMS Message",
-      cost: 0.02,
-      description: "Cost per SMS message sent through the platform"
-    },
-    {
-      id: "audio_message",
-      name: "Audio Message",
+      description: "Cost per SMS message sent through the platform",
       cost: 0.05,
-      description: "Cost per audio message sent through the platform"
+      unit: "per message"
     },
     {
-      id: "tts",
-      name: "Text-to-Speech Conversion",
-      cost: 0.03,
-      description: "Cost per text-to-speech conversion"
-    },
-    {
-      id: "audio_upload",
-      name: "Audio Upload Storage",
+      id: "2",
+      name: "Voice Call",
+      description: "Cost per minute for voice calls",
       cost: 0.10,
-      description: "Cost per audio file uploaded and stored"
+      unit: "per minute"
+    },
+    {
+      id: "3",
+      name: "Text-to-Speech",
+      description: "Cost for converting text to speech",
+      cost: 0.08,
+      unit: "per request"
+    },
+    {
+      id: "4",
+      name: "Audio Storage",
+      description: "Cost for storing audio files",
+      cost: 0.01,
+      unit: "per MB per month"
+    },
+    {
+      id: "5",
+      name: "Audio Upload",
+      description: "Cost for processing uploaded audio files",
+      cost: 0.03,
+      unit: "per file"
     }
   ]);
 
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [editedCosts, setEditedCosts] = useState<Record<string, number>>({});
-
-  const handleCostChange = (id: string, value: string) => {
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue) && numValue >= 0) {
-      setEditedCosts(prev => ({
-        ...prev,
-        [id]: numValue
-      }));
-    }
+  const handleCostChange = (id: string, newCost: number) => {
+    setServiceCosts(prev => 
+      prev.map(cost => 
+        cost.id === id ? { ...cost, cost: newCost } : cost
+      )
+    );
   };
 
-  const handleSaveChanges = () => {
-    setIsUpdating(true);
-    
-    // Simulate API call to update service costs
-    setTimeout(() => {
-      const updatedCosts = serviceCosts.map(service => ({
-        ...service,
-        cost: editedCosts[service.id] !== undefined ? editedCosts[service.id] : service.cost
-      }));
-      
-      setServiceCosts(updatedCosts);
-      setEditedCosts({});
-      
-      toast({
-        title: "Success",
-        description: "Service costs have been updated successfully.",
-      });
-      
-      setIsUpdating(false);
-    }, 1000);
-  };
-
-  const getCostValue = (id: string, originalCost: number): number => {
-    return editedCosts[id] !== undefined ? editedCosts[id] : originalCost;
+  const handleSave = (id: string) => {
+    // In a real app, we would make an API call to update the cost
+    toast({
+      title: "Cost Updated",
+      description: "The service cost has been updated successfully.",
+    });
   };
 
   return (
@@ -87,66 +81,50 @@ const AdminServiceCosts = () => {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Service Costs</h2>
         <p className="text-muted-foreground">
-          Manage the pricing for various services on the platform.
+          Manage the costs for various services offered on the platform.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Service Pricing</CardTitle>
-          <CardDescription>
-            Set the cost per unit for each service type
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          {serviceCosts.map((service) => (
-            <div key={service.id} className="grid gap-4 md:grid-cols-2">
-              <div>
-                <h3 className="text-lg font-medium">{service.name}</h3>
-                <p className="text-sm text-muted-foreground">{service.description}</p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="pl-9"
-                    value={getCostValue(service.id, service.cost)}
-                    onChange={(e) => handleCostChange(service.id, e.target.value)}
-                  />
+      <div className="grid gap-6 md:grid-cols-2">
+        {serviceCosts.map((service) => (
+          <Card key={service.id}>
+            <CardHeader>
+              <CardTitle>{service.name}</CardTitle>
+              <CardDescription>{service.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <Label htmlFor={`cost-${service.id}`} className="text-right">
+                    Cost ($)
+                  </Label>
+                  <div className="col-span-2 relative">
+                    <Input
+                      id={`cost-${service.id}`}
+                      value={service.cost}
+                      onChange={(e) => handleCostChange(service.id, Number(e.target.value) || 0)}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
                 </div>
-                <span className="text-sm text-muted-foreground">per unit</span>
+                <div className="grid grid-cols-3 items-center gap-4">
+                  <Label className="text-right">Unit</Label>
+                  <div className="col-span-2">
+                    <p className="text-sm text-muted-foreground">{service.unit}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </CardContent>
-        <CardFooter className="flex justify-end">
-          <Button 
-            onClick={handleSaveChanges} 
-            disabled={isUpdating || Object.keys(editedCosts).length === 0}
-          >
-            {isUpdating ? "Saving Changes..." : "Save Changes"}
-          </Button>
-        </CardFooter>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Pricing Strategy</CardTitle>
-          <CardDescription>Information about pricing strategy</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p>Consider the following when setting service prices:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Competitor pricing in the market</li>
-            <li>Your operational costs for providing each service</li>
-            <li>User price sensitivity and willingness to pay</li>
-            <li>Volume discounts for high-usage customers</li>
-          </ul>
-        </CardContent>
-      </Card>
+            </CardContent>
+            <CardFooter className="justify-end">
+              <Button onClick={() => handleSave(service.id)}>
+                Save Changes
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };

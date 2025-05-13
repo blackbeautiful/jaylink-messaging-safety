@@ -1,88 +1,60 @@
 
 import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const AdminSettings = () => {
-  // Mock settings data
-  const [generalSettings, setGeneralSettings] = useState({
-    siteName: "JayLink SMS",
-    contactEmail: "support@jaylink.com",
-    supportPhone: "+1 (555) 123-4567",
-    maxFileSize: "10"
-  });
-  
-  const [notificationSettings, setNotificationSettings] = useState({
-    lowBalanceAlert: true,
-    lowBalanceThreshold: "25",
-    systemNotifications: true,
-    newUserNotifications: true
+  const [emailSettings, setEmailSettings] = useState({
+    notifyOnNewUser: true,
+    notifyOnLowBalance: true,
+    dailySummary: false,
+    weeklyReport: true
   });
   
   const [securitySettings, setSecuritySettings] = useState({
-    requireMFA: false,
-    sessionTimeout: "60",
-    passwordPolicy: "medium"
+    twoFactorAuth: false,
+    sessionTimeout: "30",
+    maxLoginAttempts: "5"
   });
-  
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  
-  const [isUpdating, setIsUpdating] = useState(false);
 
-  const handleGeneralSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setGeneralSettings({
-      ...generalSettings,
-      [e.target.name]: e.target.value
+  const [systemSettings, setSystemSettings] = useState({
+    maintenanceMode: false,
+    registrationEnabled: true,
+    minBalanceThreshold: "10"
+  });
+
+  const handleSaveEmailSettings = () => {
+    toast({
+      title: "Email Settings Updated",
+      description: "Your notification preferences have been saved."
     });
   };
 
-  const handleNotificationSettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNotificationSettings({
-      ...notificationSettings,
-      [e.target.name]: e.target.type === "checkbox" ? e.target.checked : e.target.value
+  const handleSaveSecuritySettings = () => {
+    toast({
+      title: "Security Settings Updated",
+      description: "Your security settings have been saved."
     });
   };
 
-  const handleSecuritySettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setSecuritySettings({
-      ...securitySettings,
-      [e.target.name]: e.target.value
+  const handleSaveSystemSettings = () => {
+    toast({
+      title: "System Settings Updated",
+      description: "The system settings have been updated."
     });
-  };
-
-  const handleSwitchChange = (name: string, checked: boolean) => {
-    if (name === "lowBalanceAlert" || name === "systemNotifications" || name === "newUserNotifications") {
-      setNotificationSettings({
-        ...notificationSettings,
-        [name]: checked
-      });
-    } else if (name === "requireMFA") {
-      setSecuritySettings({
-        ...securitySettings,
-        [name]: checked
-      });
-    } else if (name === "maintenanceMode") {
-      setMaintenanceMode(checked);
-    }
-  };
-
-  const handleSaveSettings = (settingType: string) => {
-    setIsUpdating(true);
-    
-    // Simulate API call to save settings
-    setTimeout(() => {
-      toast({
-        title: "Settings updated",
-        description: `${settingType} settings have been saved successfully.`,
-      });
-      setIsUpdating(false);
-    }, 1000);
   };
 
   return (
@@ -90,290 +62,220 @@ const AdminSettings = () => {
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Admin Settings</h2>
         <p className="text-muted-foreground">
-          Configure system-wide settings and preferences
+          Configure system-wide settings and preferences.
         </p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+      <Tabs defaultValue="email" className="w-full">
+        <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-3 md:grid-cols-4 h-auto">
+          <TabsTrigger value="email">Email Notifications</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="maintenance">Maintenance</TabsTrigger>
+          <TabsTrigger value="system">System</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
         </TabsList>
         
-        {/* General Settings */}
-        <TabsContent value="general" className="space-y-4">
+        <TabsContent value="email" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>General Settings</CardTitle>
+              <CardTitle>Email Notification Settings</CardTitle>
               <CardDescription>
-                Basic settings for the platform
+                Configure when the system should send you email notifications.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="siteName">Site Name</Label>
-                  <Input
-                    id="siteName"
-                    name="siteName"
-                    value={generalSettings.siteName}
-                    onChange={handleGeneralSettingsChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contactEmail">Contact Email</Label>
-                  <Input
-                    id="contactEmail"
-                    name="contactEmail"
-                    type="email"
-                    value={generalSettings.contactEmail}
-                    onChange={handleGeneralSettingsChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="supportPhone">Support Phone</Label>
-                  <Input
-                    id="supportPhone"
-                    name="supportPhone"
-                    value={generalSettings.supportPhone}
-                    onChange={handleGeneralSettingsChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="maxFileSize">Max File Size (MB)</Label>
-                  <Input
-                    id="maxFileSize"
-                    name="maxFileSize"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={generalSettings.maxFileSize}
-                    onChange={handleGeneralSettingsChange}
-                  />
-                </div>
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="notify-new-user" className="flex-1">
+                  Notify on new user registration
+                </Label>
+                <Switch
+                  id="notify-new-user"
+                  checked={emailSettings.notifyOnNewUser}
+                  onCheckedChange={(checked) => 
+                    setEmailSettings(prev => ({ ...prev, notifyOnNewUser: checked }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="notify-low-balance" className="flex-1">
+                  Notify on user low balance
+                </Label>
+                <Switch
+                  id="notify-low-balance"
+                  checked={emailSettings.notifyOnLowBalance}
+                  onCheckedChange={(checked) => 
+                    setEmailSettings(prev => ({ ...prev, notifyOnLowBalance: checked }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="daily-summary" className="flex-1">
+                  Send daily summary report
+                </Label>
+                <Switch
+                  id="daily-summary"
+                  checked={emailSettings.dailySummary}
+                  onCheckedChange={(checked) => 
+                    setEmailSettings(prev => ({ ...prev, dailySummary: checked }))
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="weekly-report" className="flex-1">
+                  Send weekly analytics report
+                </Label>
+                <Switch
+                  id="weekly-report"
+                  checked={emailSettings.weeklyReport}
+                  onCheckedChange={(checked) => 
+                    setEmailSettings(prev => ({ ...prev, weeklyReport: checked }))
+                  }
+                />
               </div>
             </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button 
-                onClick={() => handleSaveSettings("General")} 
-                disabled={isUpdating}
-              >
-                {isUpdating ? "Saving..." : "Save Settings"}
+            <CardFooter>
+              <Button onClick={handleSaveEmailSettings}>
+                Save Email Settings
               </Button>
             </CardFooter>
           </Card>
         </TabsContent>
         
-        {/* Notification Settings */}
-        <TabsContent value="notifications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
-              <CardDescription>
-                Configure system notifications and alerts
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="lowBalanceAlert">Low Balance Alert</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Alert users when their balance drops below the threshold
-                  </p>
-                </div>
-                <Switch
-                  id="lowBalanceAlert"
-                  name="lowBalanceAlert"
-                  checked={notificationSettings.lowBalanceAlert}
-                  onCheckedChange={(checked) => handleSwitchChange("lowBalanceAlert", checked)}
-                />
-              </div>
-              
-              {notificationSettings.lowBalanceAlert && (
-                <div className="space-y-2">
-                  <Label htmlFor="lowBalanceThreshold">Low Balance Threshold ($)</Label>
-                  <Input
-                    id="lowBalanceThreshold"
-                    name="lowBalanceThreshold"
-                    type="number"
-                    min="0"
-                    value={notificationSettings.lowBalanceThreshold}
-                    onChange={handleNotificationSettingsChange}
-                  />
-                </div>
-              )}
-              
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="systemNotifications">System Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications about system events and updates
-                  </p>
-                </div>
-                <Switch
-                  id="systemNotifications"
-                  name="systemNotifications"
-                  checked={notificationSettings.systemNotifications}
-                  onCheckedChange={(checked) => handleSwitchChange("systemNotifications", checked)}
-                />
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="newUserNotifications">New User Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications when new users register
-                  </p>
-                </div>
-                <Switch
-                  id="newUserNotifications"
-                  name="newUserNotifications"
-                  checked={notificationSettings.newUserNotifications}
-                  onCheckedChange={(checked) => handleSwitchChange("newUserNotifications", checked)}
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button 
-                onClick={() => handleSaveSettings("Notification")} 
-                disabled={isUpdating}
-              >
-                {isUpdating ? "Saving..." : "Save Settings"}
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        {/* Security Settings */}
-        <TabsContent value="security" className="space-y-4">
+        <TabsContent value="security" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle>Security Settings</CardTitle>
               <CardDescription>
-                Configure security options for the platform
+                Configure security settings for the admin portal.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="requireMFA">Require MFA for Admin</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Require multi-factor authentication for admin access
-                  </p>
-                </div>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="two-factor-auth" className="flex-1">
+                  Require two-factor authentication
+                </Label>
                 <Switch
-                  id="requireMFA"
-                  name="requireMFA"
-                  checked={securitySettings.requireMFA}
-                  onCheckedChange={(checked) => handleSwitchChange("requireMFA", checked)}
+                  id="two-factor-auth"
+                  checked={securitySettings.twoFactorAuth}
+                  onCheckedChange={(checked) => 
+                    setSecuritySettings(prev => ({ ...prev, twoFactorAuth: checked }))
+                  }
                 />
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="sessionTimeout">Session Timeout (minutes)</Label>
+              <div className="grid gap-2">
+                <Label htmlFor="session-timeout">Session timeout (minutes)</Label>
                 <Input
-                  id="sessionTimeout"
-                  name="sessionTimeout"
+                  id="session-timeout"
+                  value={securitySettings.sessionTimeout}
+                  onChange={(e) => 
+                    setSecuritySettings(prev => ({ ...prev, sessionTimeout: e.target.value }))
+                  }
                   type="number"
                   min="5"
-                  max="240"
-                  value={securitySettings.sessionTimeout}
-                  onChange={handleSecuritySettingsChange}
+                  max="120"
                 />
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="passwordPolicy">Password Policy</Label>
-                <select
-                  id="passwordPolicy"
-                  name="passwordPolicy"
-                  value={securitySettings.passwordPolicy}
-                  onChange={handleSecuritySettingsChange}
-                  className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="low">Low (8+ characters)</option>
-                  <option value="medium">Medium (8+ chars, mixed case, numbers)</option>
-                  <option value="high">High (12+ chars, mixed case, numbers, symbols)</option>
-                </select>
+              <div className="grid gap-2">
+                <Label htmlFor="max-login-attempts">Maximum login attempts</Label>
+                <Input
+                  id="max-login-attempts"
+                  value={securitySettings.maxLoginAttempts}
+                  onChange={(e) => 
+                    setSecuritySettings(prev => ({ ...prev, maxLoginAttempts: e.target.value }))
+                  }
+                  type="number"
+                  min="3"
+                  max="10"
+                />
               </div>
             </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button 
-                onClick={() => handleSaveSettings("Security")} 
-                disabled={isUpdating}
-              >
-                {isUpdating ? "Saving..." : "Save Settings"}
+            <CardFooter>
+              <Button onClick={handleSaveSecuritySettings}>
+                Save Security Settings
               </Button>
             </CardFooter>
           </Card>
         </TabsContent>
         
-        {/* Maintenance Mode */}
-        <TabsContent value="maintenance" className="space-y-4">
+        <TabsContent value="system" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Maintenance Mode</CardTitle>
+              <CardTitle>System Settings</CardTitle>
               <CardDescription>
-                Configure system maintenance settings
+                Configure system-wide settings and thresholds.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="maintenanceMode">Enable Maintenance Mode</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Put the site in maintenance mode (only admins can access)
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="maintenance-mode" className="flex-1">
+                  Maintenance mode
+                  <p className="text-sm text-muted-foreground mt-1">
+                    When enabled, only admins can access the platform
                   </p>
-                </div>
+                </Label>
                 <Switch
-                  id="maintenanceMode"
-                  checked={maintenanceMode}
-                  onCheckedChange={(checked) => handleSwitchChange("maintenanceMode", checked)}
+                  id="maintenance-mode"
+                  checked={systemSettings.maintenanceMode}
+                  onCheckedChange={(checked) => 
+                    setSystemSettings(prev => ({ ...prev, maintenanceMode: checked }))
+                  }
                 />
               </div>
-              
-              {maintenanceMode && (
-                <div className="space-y-2">
-                  <Label htmlFor="maintenanceMessage">Maintenance Message</Label>
-                  <Textarea
-                    id="maintenanceMessage"
-                    placeholder="Enter a message to display to users during maintenance..."
-                    className="min-h-[120px]"
-                  />
-                </div>
-              )}
-              
-              <div className="rounded-md bg-amber-50 p-4 border border-amber-200">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-amber-800">
-                      Warning
-                    </h3>
-                    <div className="mt-2 text-sm text-amber-700">
-                      <p>
-                        Enabling maintenance mode will prevent all non-admin users from accessing the platform. Make sure to schedule maintenance during off-peak hours.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="registration-enabled" className="flex-1">
+                  Allow new user registration
+                </Label>
+                <Switch
+                  id="registration-enabled"
+                  checked={systemSettings.registrationEnabled}
+                  onCheckedChange={(checked) => 
+                    setSystemSettings(prev => ({ ...prev, registrationEnabled: checked }))
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="min-balance">Minimum balance threshold ($)</Label>
+                <Input
+                  id="min-balance"
+                  value={systemSettings.minBalanceThreshold}
+                  onChange={(e) => 
+                    setSystemSettings(prev => ({ ...prev, minBalanceThreshold: e.target.value }))
+                  }
+                  type="number"
+                  min="0"
+                  step="0.01"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Users will be alerted when their balance falls below this threshold
+                </p>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button 
-                onClick={() => handleSaveSettings("Maintenance")} 
-                disabled={isUpdating}
-                variant={maintenanceMode ? "destructive" : "default"}
-              >
-                {isUpdating ? "Saving..." : (maintenanceMode ? "Enable Maintenance Mode" : "Save Settings")}
+            <CardFooter>
+              <Button onClick={handleSaveSystemSettings}>
+                Save System Settings
               </Button>
             </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="appearance" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Appearance Settings</CardTitle>
+              <CardDescription>
+                Customize the look and feel of the admin portal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="theme-toggle" className="flex-1">
+                  Theme Mode
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Choose between light, dark, or system theme
+                  </p>
+                </Label>
+                <ThemeToggle />
+              </div>
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>

@@ -2,6 +2,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const AdminRoute = () => {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -33,7 +34,12 @@ const AdminRoute = () => {
   }, []);
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading admin verification...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-jaylink-600 dark:text-jaylink-400" />
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Verifying admin access...</p>
+      </div>
+    );
   }
 
   return isAdmin ? <Outlet /> : <Navigate to="/jayadminlink/login" />;

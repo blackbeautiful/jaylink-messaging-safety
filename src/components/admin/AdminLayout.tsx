@@ -13,6 +13,8 @@ import {
   Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { toast } from "@/hooks/use-toast";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -35,6 +37,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   const handleLogout = () => {
     localStorage.removeItem("adminToken");
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out of admin panel."
+    });
     navigate("/jayadminlink/login");
   };
 
@@ -92,7 +98,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           </div>
           <Button
             variant="outline"
-            className="w-full border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center"
+            className="w-full border-gray-200 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
             onClick={handleLogout}
           >
             <LogOut size={16} className="mr-2" />
@@ -108,14 +114,15 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             Admin Portal
           </h1>
           <div className="flex items-center space-x-4">
-            <Link to="/dashboard" className="text-sm text-jaylink-600 hover:text-jaylink-700">
+            <ThemeToggle />
+            <Link to="/dashboard" className="text-sm text-jaylink-600 dark:text-jaylink-400 hover:text-jaylink-700 dark:hover:text-jaylink-300">
               Go to User Dashboard
             </Link>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto bg-gray-50 dark:bg-gray-900">
           {children}
         </main>
       </div>

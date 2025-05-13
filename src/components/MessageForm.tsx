@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,12 +20,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -35,7 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Send, Calendar, UsersRound } from "lucide-react";
+import { Loader2, Send, Calendar, UsersRound, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ContactSelector, { Contact } from "./contacts/ContactSelector";
@@ -65,6 +58,7 @@ const MessageForm = () => {
   const [scheduledDate, setScheduledDate] = useState("");
   const [openContactsDialog, setOpenContactsDialog] = useState(false);
   const [openGroupsDialog, setOpenGroupsDialog] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   
   // Selected contacts/groups state
@@ -127,34 +121,73 @@ const MessageForm = () => {
     setOpenGroupsDialog(false);
   };
 
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Simple validation for CSV
+      if (file.type !== "text/csv" && !file.name.endsWith('.csv')) {
+        toast.error("Please upload a valid CSV file");
+        return;
+      }
+      
+      // Read file to count recipients
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target && event.target.result) {
+          const content = event.target.result as string;
+          const lines = content.split('\n').filter(line => line.trim());
+          
+          setFormData({
+            ...formData,
+            csvFile: file,
+            recipientCount: lines.length
+          });
+          
+          toast.success(`CSV file loaded with ${lines.length} recipient(s)`);
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Validate before submitting
-    if (!formData.recipients && formData.recipientType === "direct") {
-      toast.error("Please enter at least one recipient");
-      setLoading(false);
-      return;
-    }
-
-    if (!formData.message) {
-      toast.error("Please enter a message");
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Prepare the recipients based on the type
+      // Validation
+      if (bulkMode && !formData.csvFile) {
+        toast.error("Please upload a CSV file for bulk messaging");
+        setLoading(false);
+        return;
+      }
+
+      if (!bulkMode && !formData.recipients && formData.recipientType === "direct") {
+        toast.error("Please enter at least one recipient");
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.message) {
+        toast.error("Please enter a message");
+        setLoading(false);
+        return;
+      }
+
+      // Prepare recipients based on the type and mode
       let recipients;
       
-      if (formData.recipientType === "direct") {
+      if (bulkMode) {
+        // In bulk mode, we'll use the CSV file
+        // In a real implementation, we'd process the CSV here or send it to the API
+        recipients = `csv_${formData.recipientCount}_recipients`;
+      } else if (formData.recipientType === "direct") {
         recipients = formData.recipients;
       } else if (formData.recipientType === "contacts") {
         recipients = selectedContacts.map(c => c.phone).join(",");
       } else if (formData.recipientType === "group" && selectedGroup) {
         // In a real app, you would fetch all contacts in this group
-        // For now, we'll just use the group's id or name
         recipients = `group_${selectedGroup.id}`;
       }
 
@@ -168,8 +201,8 @@ const MessageForm = () => {
 
       toast.success(
         scheduledMessage
-          ? `Message scheduled to ${formData.recipientCount || '1+'} recipient(s)`
-          : `Message sent to ${formData.recipientCount || '1+'} recipient(s)`
+          ? `Message ${bulkMode ? 'bulk ' : ''}scheduled to ${formData.recipientCount || '1+'} recipient(s)`
+          : `Message ${bulkMode ? 'bulk ' : ''}sent to ${formData.recipientCount || '1+'} recipient(s)`
       );
       
       // Reset form
@@ -181,6 +214,8 @@ const MessageForm = () => {
         csvFile: null,
         recipientCount: 0,
       });
+      
+      if (csvInputRef.current) csvInputRef.current.value = '';
       setSelectedContacts([]);
       setSelectedGroup(null);
       setScheduledMessage(false);
@@ -216,24 +251,177 @@ const MessageForm = () => {
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-6">
-          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
-            <div className="space-y-1">
-              <Label htmlFor="recipientType">Recipient Type</Label>
-              <Select 
-                value={formData.recipientType} 
-                onValueChange={(value) => handleSelectChange("recipientType", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select recipient type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="direct">Direct Entry</SelectItem>
-                  <SelectItem value="contacts">From Contacts</SelectItem>
-                  <SelectItem value="group">From Group</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Bulk Mode CSV Upload */}
+          {bulkMode ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Bulk Recipients</CardTitle>
+                <CardDescription>
+                  Upload a CSV file with phone numbers
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="mt-1 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
+                  <div className="space-y-2 text-center">
+                    <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="flex text-sm text-gray-600 dark:text-gray-400">
+                      <label
+                        htmlFor="csvFile"
+                        className="relative cursor-pointer rounded-md font-medium text-jaylink-600 hover:text-jaylink-700"
+                      >
+                        <span>Upload CSV file</span>
+                        <Input
+                          id="csvFile"
+                          name="csvFile"
+                          type="file"
+                          accept=".csv"
+                          ref={csvInputRef}
+                          onChange={handleCsvUpload}
+                          className="sr-only"
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">CSV format with one phone number per line</p>
+                  </div>
+                </div>
+                {formData.csvFile && (
+                  <div className="mt-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      File: {formData.csvFile.name}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Recipients: {formData.recipientCount}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            /* Regular Mode Recipient Selection */
+            <div className="space-y-4">
+              <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
+                <div className="space-y-1">
+                  <Label htmlFor="recipientType">Recipient Type</Label>
+                  <Select 
+                    value={formData.recipientType} 
+                    onValueChange={(value) => handleSelectChange("recipientType", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select recipient type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="direct">Direct Entry</SelectItem>
+                      <SelectItem value="contacts">From Contacts</SelectItem>
+                      <SelectItem value="group">From Group</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
+                <div className="space-y-1">
+                  <Label htmlFor="senderId">Sender ID</Label>
+                  <Input
+                    id="senderId"
+                    name="senderId"
+                    placeholder="Enter Sender ID (max 11 characters)"
+                    value={formData.senderId}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                    maxLength={11}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum 11 characters
+                  </p>
+                </div>
+              </div>
+
+              {formData.recipientType === "direct" && (
+                <div>
+                  <Label htmlFor="recipients">Recipients</Label>
+                  <Input
+                    id="recipients"
+                    name="recipients"
+                    placeholder="Enter phone numbers separated by commas"
+                    value={formData.recipients}
+                    onChange={handleInputChange}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Format: +234800123456, +234800123457
+                  </p>
+                </div>
+              )}
+
+              {formData.recipientType === "contacts" && (
+                <div className="space-y-2">
+                  <Label>Select Contacts</Label>
+                  <Dialog open={openContactsDialog} onOpenChange={setOpenContactsDialog}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full flex justify-between items-center">
+                        <span>{selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}</span>
+                        <UsersRound className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Select Contacts</DialogTitle>
+                        <DialogDescription>
+                          Choose contacts to send your message to
+                        </DialogDescription>
+                      </DialogHeader>
+                      <ContactSelector 
+                        contacts={mockContacts} 
+                        onContactsSelected={handleContactsSelected}
+                        buttonText="Confirm Selection"
+                      />
+                    </DialogContent>
+                  </Dialog>
+                  
+                  {selectedContacts.length > 0 && (
+                    <div className="text-sm text-muted-foreground">
+                      Selected {selectedContacts.length} contact(s)
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {formData.recipientType === "group" && (
+                <div className="space-y-2">
+                  <Label>Select Group</Label>
+                  <Dialog open={openGroupsDialog} onOpenChange={setOpenGroupsDialog}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full flex justify-between items-center">
+                        <span>{selectedGroup ? selectedGroup.name : "Select Group"}</span>
+                        <UsersRound className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Select Group</DialogTitle>
+                        <DialogDescription>
+                          Choose a contact group for bulk messaging
+                        </DialogDescription>
+                      </DialogHeader>
+                      <GroupSelector 
+                        groups={mockGroups} 
+                        onGroupSelected={handleGroupSelected}
+                        buttonText="Select Group"
+                      />
+                    </DialogContent>
+                  </Dialog>
+                  
+                  {selectedGroup && (
+                    <div className="text-sm text-muted-foreground">
+                      Group with {selectedGroup.members} member(s)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sender ID for Bulk Mode */}
+          {bulkMode && (
             <div className="space-y-1">
               <Label htmlFor="senderId">Sender ID</Label>
               <Input
@@ -249,91 +437,9 @@ const MessageForm = () => {
                 Maximum 11 characters
               </p>
             </div>
-          </div>
-
-          {formData.recipientType === "direct" && (
-            <div>
-              <Label htmlFor="recipients">Recipients</Label>
-              <Input
-                id="recipients"
-                name="recipients"
-                placeholder="Enter phone numbers separated by commas"
-                value={formData.recipients}
-                onChange={handleInputChange}
-                className="mt-1"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Format: +234800123456, +234800123457
-              </p>
-            </div>
           )}
 
-          {formData.recipientType === "contacts" && (
-            <div className="space-y-2">
-              <Label>Select Contacts</Label>
-              <Dialog open={openContactsDialog} onOpenChange={setOpenContactsDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full flex justify-between items-center">
-                    <span>{selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}</span>
-                    <UsersRound className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Select Contacts</DialogTitle>
-                    <DialogDescription>
-                      Choose contacts to send your message to
-                    </DialogDescription>
-                  </DialogHeader>
-                  <ContactSelector 
-                    contacts={mockContacts} 
-                    onContactsSelected={handleContactsSelected}
-                    buttonText="Confirm Selection"
-                  />
-                </DialogContent>
-              </Dialog>
-              
-              {selectedContacts.length > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  Selected {selectedContacts.length} contact(s)
-                </div>
-              )}
-            </div>
-          )}
-
-          {formData.recipientType === "group" && (
-            <div className="space-y-2">
-              <Label>Select Group</Label>
-              <Dialog open={openGroupsDialog} onOpenChange={setOpenGroupsDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full flex justify-between items-center">
-                    <span>{selectedGroup ? selectedGroup.name : "Select Group"}</span>
-                    <UsersRound className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Select Group</DialogTitle>
-                    <DialogDescription>
-                      Choose a contact group for bulk messaging
-                    </DialogDescription>
-                  </DialogHeader>
-                  <GroupSelector 
-                    groups={mockGroups} 
-                    onGroupSelected={handleGroupSelected}
-                    buttonText="Select Group"
-                  />
-                </DialogContent>
-              </Dialog>
-              
-              {selectedGroup && (
-                <div className="text-sm text-muted-foreground">
-                  Group with {selectedGroup.members} member(s)
-                </div>
-              )}
-            </div>
-          )}
-
+          {/* Message Content (Common for Both Modes) */}
           <div>
             <Label htmlFor="message">Message</Label>
             <Textarea
@@ -355,6 +461,7 @@ const MessageForm = () => {
             </div>
           </div>
 
+          {/* Schedule Controls (Common for Both Modes) */}
           <div className="flex items-center space-x-2">
             <Switch 
               id="scheduledMessage"
@@ -386,6 +493,7 @@ const MessageForm = () => {
             </div>
           )}
 
+          {/* Submit Button */}
           <Button
             type="submit"
             className="w-full bg-jaylink-600 hover:bg-jaylink-700 flex items-center justify-center"
@@ -396,7 +504,10 @@ const MessageForm = () => {
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            {scheduledMessage ? "Schedule Message" : "Send Message"}
+            {bulkMode 
+              ? scheduledMessage ? "Schedule Bulk Messages" : "Send Bulk Messages"
+              : scheduledMessage ? "Schedule Message" : "Send Message"
+            }
           </Button>
         </div>
       </form>

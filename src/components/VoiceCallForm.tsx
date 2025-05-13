@@ -1,4 +1,3 @@
-
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -71,6 +70,12 @@ const VoiceCallForm = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    
+    // Limit callerID to 11 characters
+    if (name === "callerID" && value.length > 11) {
+      return;
+    }
+    
     setFormData({
       ...formData,
       [name]: value,
@@ -340,21 +345,20 @@ const VoiceCallForm = () => {
               </div>
             )}
 
-            <div>
+            <div className="space-y-1">
               <Label htmlFor="callerID">Caller ID</Label>
-              <Select
+              <Input
+                id="callerID"
+                name="callerID"
+                placeholder="Enter Caller ID (max 11 characters)"
                 value={formData.callerID}
-                onValueChange={(value) => handleSelectChange("callerID", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select caller ID" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="+2348012345678">+234 801 234 5678</SelectItem>
-                  <SelectItem value="+2348023456789">+234 802 345 6789</SelectItem>
-                  <SelectItem value="+2347034567890">+234 703 456 7890</SelectItem>
-                </SelectContent>
-              </Select>
+                onChange={handleInputChange}
+                className="mt-1"
+                maxLength={11}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Maximum 11 characters
+              </p>
             </div>
 
             <TabsContent value="tts" className="mt-0">

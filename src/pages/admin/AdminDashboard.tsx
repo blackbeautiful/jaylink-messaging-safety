@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, CreditCard, DollarSign, FileText, Users } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -91,7 +90,7 @@ const AdminDashboard = () => {
               <div className="text-2xl font-bold">{stat.value}</div>
               <p className="text-xs text-muted-foreground">{stat.description}</p>
               <div className="flex items-center pt-1">
-                <span className="text-xs text-green-600">{stat.change}</span>
+                <span className="text-xs text-green-600 dark:text-green-400">{stat.change}</span>
                 <span className="text-xs text-muted-foreground ml-1">from last month</span>
               </div>
             </CardContent>
@@ -107,31 +106,31 @@ const AdminDashboard = () => {
           </CardHeader>
           <CardContent className="grid gap-2">
             <Link 
-              to="/admin/service-costs" 
-              className="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-md"
+              to="/jayadminlink/service-costs" 
+              className="flex items-center p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 transition-colors"
             >
-              <DollarSign className="mr-2 h-5 w-5 text-muted-foreground" />
+              <DollarSign className="mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" />
               <span>Manage Service Pricing</span>
             </Link>
             <Link 
-              to="/admin/balance-management" 
-              className="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-md"
+              to="/jayadminlink/balance-management" 
+              className="flex items-center p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 transition-colors"
             >
-              <CreditCard className="mr-2 h-5 w-5 text-muted-foreground" />
+              <CreditCard className="mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" />
               <span>Manage User Balances</span>
             </Link>
             <Link 
-              to="/admin/transactions" 
-              className="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-md"
+              to="/jayadminlink/transactions" 
+              className="flex items-center p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 transition-colors"
             >
-              <FileText className="mr-2 h-5 w-5 text-muted-foreground" />
+              <FileText className="mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" />
               <span>View Transactions</span>
             </Link>
             <Link 
-              to="/admin/analytics" 
-              className="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-md"
+              to="/jayadminlink/analytics" 
+              className="flex items-center p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 transition-colors"
             >
-              <BarChart3 className="mr-2 h-5 w-5 text-muted-foreground" />
+              <BarChart3 className="mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" />
               <span>View Analytics</span>
             </Link>
           </CardContent>
@@ -147,15 +146,15 @@ const AdminDashboard = () => {
               {recentTransactions.map((transaction) => (
                 <div 
                   key={transaction.id} 
-                  className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0"
+                  className="flex justify-between items-center border-b pb-2 last:border-0 last:pb-0 border-gray-200 dark:border-gray-700"
                 >
                   <div>
-                    <p className="font-medium">{transaction.user}</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{transaction.user}</p>
                     <p className="text-sm text-muted-foreground">
                       {transaction.type} • {transaction.date}
                     </p>
                   </div>
-                  <div className={`font-medium ${transaction.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`font-medium ${transaction.amount.startsWith('+') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {transaction.amount}
                   </div>
                 </div>

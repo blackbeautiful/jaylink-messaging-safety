@@ -34,7 +34,7 @@ const Balance = () => {
     { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
     { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
     { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
-    { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
+    // { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
     { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
     { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
     { name: "Groups", icon: <Users size={20} />, path: "/groups" },

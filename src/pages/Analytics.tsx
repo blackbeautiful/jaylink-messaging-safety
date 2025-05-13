@@ -32,7 +32,7 @@ const Analytics = () => {
     { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
     { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
     { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
-    { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
+    // { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
     { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
     { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
     { name: "Groups", icon: <Users size={20} />, path: "/groups" },
@@ -99,7 +99,8 @@ const Analytics = () => {
         </nav>
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center">
+          {/* CHANGE TO CONTACT SUPPORT LATER */}
+          {/* <div className="flex items-center">
             <div className="w-10 h-10 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600">
               <User size={20} />
             </div>
@@ -111,7 +112,7 @@ const Analytics = () => {
                 john@example.com
               </p>
             </div>
-          </div>
+          </div> */}
           <Button
             variant="outline"
             className="w-full mt-4 border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center"

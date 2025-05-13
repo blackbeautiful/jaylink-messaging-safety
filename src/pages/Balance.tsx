@@ -137,15 +137,17 @@ const Balance = () => {
                 <Plus className="mr-2 h-4 w-4" />
                 Top Up
               </Button>
-              <Link to="/">
+              <Link to="/dashboard">
                 <Button variant="ghost" size="icon">
                   <Home size={20} />
                 </Button>
               </Link>
               <NotificationMenu />
-              <Button variant="ghost" size="icon">
-                <Settings size={20} />
-              </Button>
+              <Link to="/settings">
+                <Button variant="ghost" size="icon">
+                  <Settings size={20} />
+                </Button>
+              </Link>
             </div>
           </div>
         </motion.header>

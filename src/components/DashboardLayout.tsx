@@ -1,15 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ReactNode, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   MessageSquare,
   Phone,
@@ -29,7 +38,11 @@ import {
   Calendar,
   Volume2,
   Plus,
+  CreditCard,
+  Loader2,
+  HelpCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import NotificationMenu from "@/components/NotificationMenu";
 
 // Define the DashboardLayout props interface
@@ -51,10 +64,14 @@ interface Notification {
 
 const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [hasNewNotifications, setHasNewNotifications] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Use provided currentPath or fall back to location.pathname
   const actualPath = currentPath || location.pathname;
@@ -97,18 +114,39 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
     setHasNewNotifications(false);
   };
 
+  // Handle Top Up
+  const handleTopUp = () => {
+    setLoading(true);
+    
+    // Simulate API call
+    setTimeout(() => {
+      setLoading(false);
+      setTopUpDialogOpen(false);
+      setTopUpAmount("");
+      toast.success("Balance topped up successfully!");
+      // Navigate to payment/checkout page after successful API response
+      navigate('/payment', { 
+        state: { 
+          amount: topUpAmount,
+          type: 'topup',
+          date: new Date().toISOString()
+        } 
+      });
+    }, 1500);
+  };
+
   // Sidebar navigation links configuration
   const sidebarLinks = useMemo(
     () => [
       { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
-    { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
-    { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
-    // { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
-    { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
-    { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
-    { name: "Groups", icon: <Users size={20} />, path: "/groups" },
-    { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
-    { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
+      { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
+      { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
+      // { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
+      { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
+      { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
+      { name: "Groups", icon: <Users size={20} />, path: "/groups" },
+      { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
+      { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
     ],
     []
   );
@@ -170,7 +208,7 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               <li key={link.name}>
                 <Link
                   to={link.path}
-                  className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
+                  className={`flex items-center px-2 py-2 text-sm rounded-lg transition-colors ${
                     link.path === actualPath
                       ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -192,7 +230,15 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
           </ul>
         </nav>
 
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+          {/* Support/Help Link for Desktop */}
+          <Link 
+            to="/support" 
+            className="flex items-center px-3 py-2 text-sm rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <HelpCircle size={16} className="mr-2" />
+            Get Help
+          </Link>
           <Button
             variant="outline"
             className="w-full border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center"
@@ -232,15 +278,15 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
                   <li key={link.name}>
                     <Link
                       to={link.path}
-                      className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
-                        link.path === '/balance'
+                      className={`flex items-center px-2 py-2 text-sm rounded-lg transition-colors ${
+                        link.path === actualPath
                           ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
                           : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                       }`}
                     >
                       <span
                         className={`mr-3 ${
-                          link.path === '/balance'
+                          link.path === actualPath
                             ? 'text-jaylink-600 dark:text-jaylink-400'
                             : 'text-gray-500 dark:text-gray-400'
                         }`}
@@ -254,15 +300,32 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               </ul>
             </nav>
 
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-              <Button
-                variant="outline"
-                className="w-full border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center"
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+              {/* Top Up Button for Mobile */}
+              <button
+                onClick={() => setTopUpDialogOpen(true)}
+                className="flex items-center w-full px-3 py-2 text-sm rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <Plus size={16} className="mr-2" />
+                Top Up Balance
+              </button>
+
+              {/* Support/Help Link for Mobile */}
+              <Link
+                to="/support"
+                className="flex items-center px-3 py-2 text-sm rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <HelpCircle size={16} className="mr-2" />
+                Get Help
+              </Link>
+
+              <button
                 onClick={handleSignOut}
+                className="flex items-center w-full px-3 py-2 text-sm rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 <LogOut size={16} className="mr-2" />
                 Sign out
-              </Button>
+              </button>
             </div>
           </div>
         </SheetContent>
@@ -278,7 +341,7 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
         >
           <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
             <div className="flex items-center">
-              {/* Fixed: Remove DialogTrigger, replace with simple button */}
+              {/* Mobile menu button */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -312,10 +375,65 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h1>
             </div>
             <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" className="text-sm hidden sm:flex">
-                <Plus className="mr-2 h-4 w-4" />
-                Top Up
-              </Button>
+              {/* Top Up Button for Desktop */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-sm hidden sm:flex">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Top Up
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium leading-none">Top Up Balance</h4>
+                      <p className="text-sm text-muted-foreground">Add funds to your account</p>
+                    </div>
+                    <div className="grid gap-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        {[500, 1000, 2000, 5000, 10000, 20000].map((amount) => (
+                          <Button
+                            key={amount}
+                            variant="outline"
+                            className={
+                              topUpAmount === amount.toString()
+                                ? 'border-jaylink-600 bg-jaylink-50'
+                                : ''
+                            }
+                            onClick={() => setTopUpAmount(amount.toString())}
+                          >
+                            ₦{amount.toLocaleString()}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="relative">
+                        <Label htmlFor="amount">Custom Amount (₦)</Label>
+                        <Input
+                          id="amount"
+                          placeholder="Enter amount"
+                          type="number"
+                          value={topUpAmount}
+                          onChange={(e) => setTopUpAmount(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <Button
+                        className="w-full bg-jaylink-600 hover:bg-jaylink-700"
+                        onClick={() => {
+                          if (topUpAmount) {
+                            setTopUpDialogOpen(true);
+                          } else {
+                            toast.error('Please enter an amount');
+                          }
+                        }}
+                      >
+                        Continue
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
               <Link to="/dashboard">
                 <Button variant="ghost" size="icon">
                   <Home size={20} />
@@ -334,6 +452,60 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
         {/* Main Content */}
         <main className="p-4 sm:p-6 md:p-8">{children}</main>
       </div>
+
+      {/* Top Up Dialog */}
+      <Dialog open={topUpDialogOpen} onOpenChange={setTopUpDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Top Up Balance</DialogTitle>
+            <DialogDescription>
+              Add funds to your account to continue sending messages.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="topUpAmount">Amount (₦)</Label>
+              <Input
+                id="topUpAmount"
+                placeholder="Enter amount"
+                type="number"
+                value={topUpAmount}
+                onChange={(e) => setTopUpAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" className="justify-start">
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Credit Card
+                </Button>
+                <Button type="button" variant="outline" className="justify-start">
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Bank Transfer
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleTopUp}
+              disabled={loading}
+              className="bg-jaylink-600 hover:bg-jaylink-700"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing
+                </>
+              ) : (
+                'Proceed to Payment'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

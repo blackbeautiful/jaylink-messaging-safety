@@ -13,8 +13,10 @@ import AudioMessage from "./pages/AudioMessage";
 import VoiceCalls from "./pages/VoiceCalls";
 import Analytics from "./pages/Analytics";
 import Balance from "./pages/Balance";
+import Support from "./pages/Support";
 import Groups from "./pages/Groups";
 import Scheduled from "./pages/Scheduled";
+import PaymentPage from "./pages/PaymentPage";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import UploadAudio from "./pages/UploadAudio";
@@ -49,24 +51,78 @@ const App = () => (
           <Route path="/voice-calls" element={<VoiceCalls />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/balance" element={<Balance />} />
+          <Route path="/support" element={<Support />} />
           <Route path="/groups" element={<Groups />} />
           <Route path="/scheduled" element={<Scheduled />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/payment" element={<PaymentPage />} />
           <Route path="/upload-audio" element={<UploadAudio />} />
-          
+
           {/* Admin Routes - Changed from /admin to /jayadminlink */}
           <Route path="/jayadminlink/login" element={<AdminLogin />} />
           <Route element={<AdminRoute />}>
-            <Route path="/jayadminlink" element={<Navigate to="/jayadminlink/dashboard" replace />} />
-            <Route path="/jayadminlink/dashboard" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
-            <Route path="/jayadminlink/service-costs" element={<AdminLayout><AdminServiceCosts /></AdminLayout>} />
-            <Route path="/jayadminlink/balance-management" element={<AdminLayout><AdminBalanceManagement /></AdminLayout>} />
-            <Route path="/jayadminlink/transactions" element={<AdminLayout><AdminTransactions /></AdminLayout>} />
-            <Route path="/jayadminlink/analytics" element={<AdminLayout><AdminAnalytics /></AdminLayout>} />
-            <Route path="/jayadminlink/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
-            <Route path="/jayadminlink/users" element={<AdminLayout><AdminUserManagement /></AdminLayout>} />
+            <Route
+              path="/jayadminlink"
+              element={<Navigate to="/jayadminlink/dashboard" replace />}
+            />
+            <Route
+              path="/jayadminlink/dashboard"
+              element={
+                <AdminLayout>
+                  <AdminDashboard />
+                </AdminLayout>
+              }
+            />
+            <Route
+              path="/jayadminlink/service-costs"
+              element={
+                <AdminLayout>
+                  <AdminServiceCosts />
+                </AdminLayout>
+              }
+            />
+            <Route
+              path="/jayadminlink/balance-management"
+              element={
+                <AdminLayout>
+                  <AdminBalanceManagement />
+                </AdminLayout>
+              }
+            />
+            <Route
+              path="/jayadminlink/transactions"
+              element={
+                <AdminLayout>
+                  <AdminTransactions />
+                </AdminLayout>
+              }
+            />
+            <Route
+              path="/jayadminlink/analytics"
+              element={
+                <AdminLayout>
+                  <AdminAnalytics />
+                </AdminLayout>
+              }
+            />
+            <Route
+              path="/jayadminlink/settings"
+              element={
+                <AdminLayout>
+                  <AdminSettings />
+                </AdminLayout>
+              }
+            />
+            <Route
+              path="/jayadminlink/users"
+              element={
+                <AdminLayout>
+                  <AdminUserManagement />
+                </AdminLayout>
+              }
+            />
           </Route>
-          
+
           {/* Redirect /login to the root path */}
           <Route path="/login" element={<Navigate to="/" replace />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

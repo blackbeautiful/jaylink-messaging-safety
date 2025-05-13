@@ -1,7 +1,7 @@
 
 import { useEffect } from "react";
 import AudioUploadForm from "@/components/AudioUploadForm";
-import AppLayout from "@/components/layout/AppLayout";
+import DashboardLayout from "@/components/DashboardLayout";
 
 const UploadAudio = () => {
   useEffect(() => {
@@ -9,9 +9,9 @@ const UploadAudio = () => {
   }, []);
 
   return (
-    <AppLayout title="Upload Audio" currentPath="/upload-audio">
+    <DashboardLayout title="Upload Audio" backLink="/dashboard" currentPath="/upload-audio">
       <AudioUploadForm />
-    </AppLayout>
+    </DashboardLayout>
   );
 };
 

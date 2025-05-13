@@ -13,8 +13,13 @@ import {
   BarChart3,
   Wallet,
   LayoutDashboard,
+  Users,
+  Calendar,
+  Plus,
 } from "lucide-react";
 import DashboardStats from "@/components/DashboardStats";
+import NotificationMenu from "@/components/NotificationMenu";
+import MobileDashboardMenu from "@/components/MobileDashboardMenu";
 import MessageForm from "@/components/MessageForm";
 
 const Dashboard = () => {
@@ -24,11 +29,13 @@ const Dashboard = () => {
 
   const sidebarLinks = [
     { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
-    { name: "Send SMS", icon: <MessageSquare size={20} />, path: "/send-sms" },
+    { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
     { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
     { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
     { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
     { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
+    { name: "Groups", icon: <Users size={20} />, path: "/groups" },
+    { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
     { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
   ];
 
@@ -41,29 +48,54 @@ const Dashboard = () => {
         transition={{ duration: 0.5 }}
         className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
       >
-        <div className="p-6">
-          <Link to="/" className="flex items-center space-x-2">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <Link to="/" className="flex items-center space-x-2 mb-4">
             <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
               Jay<span className="text-jaylink-600">Link</span>
             </span>
           </Link>
+          
+          {/* User info moved to the top under logo */}
+          <div className="flex items-center">
+            <div className="w-10 h-10 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600 mr-3">
+              <User size={20} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                John Doe
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                john@example.com
+              </p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <ul className="space-y-1">
-            {sidebarLinks.map((link) => (
-              <li key={link.name}>
-                <Link
-                  to={link.path}
-                  className="flex items-center px-3 py-3 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <span className="text-jaylink-600 dark:text-jaylink-400 mr-3">
-                    {link.icon}
-                  </span>
-                  <span className="font-medium">{link.name}</span>
-                </Link>
-              </li>
-            ))}
+            {sidebarLinks.map((link) => 
+              (
+                <li key={link.name}>
+                  <Link
+                    to={link.path}
+                    className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
+                      link.path === "/dashboard"
+                        ? "bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    }`}
+                  >
+                    <span className={`mr-3 ${
+                      link.path === "/dashboard"
+                        ? "text-jaylink-600 dark:text-jaylink-400"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}>
+                      {link.icon}
+                    </span>
+                    <span className="font-medium">{link.name}</span>
+                  </Link>
+                </li>
+              )
+            )}
           </ul>
         </nav>
 
@@ -102,6 +134,7 @@ const Dashboard = () => {
         >
           <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
             <div className="flex items-center">
+              <MobileDashboardMenu userName="John Doe" userEmail="john@example.com" />
               <Button variant="ghost" size="icon" className="md:hidden mr-2">
                 <LayoutDashboard size={20} />
               </Button>
@@ -110,17 +143,19 @@ const Dashboard = () => {
               </h1>
             </div>
             <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" className="text-sm hidden sm:flex">
+                <Plus className="mr-2 h-4 w-4" />
+                Top Up
+              </Button>
               <Link to="/">
                 <Button variant="ghost" size="icon">
                   <Home size={20} />
                 </Button>
               </Link>
+              <NotificationMenu />
               <Button variant="ghost" size="icon">
                 <Settings size={20} />
               </Button>
-              <div className="w-8 h-8 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600 md:hidden">
-                <User size={16} />
-              </div>
             </div>
           </div>
         </motion.header>

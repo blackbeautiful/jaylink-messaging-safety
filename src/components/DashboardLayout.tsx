@@ -13,6 +13,7 @@ import {
 import {
   MessageSquare,
   Phone,
+  Upload,
   Settings,
   LogOut,
   User,
@@ -27,7 +28,9 @@ import {
   Users,
   Calendar,
   Volume2,
+  Plus,
 } from 'lucide-react';
+import NotificationMenu from "@/components/NotificationMenu";
 
 // Define the DashboardLayout props interface
 interface DashboardLayoutProps {
@@ -97,58 +100,15 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
   // Sidebar navigation links configuration
   const sidebarLinks = useMemo(
     () => [
-      {
-        name: 'Dashboard',
-        icon: <LayoutDashboard size={20} />,
-        path: '/dashboard',
-        hasSubmenu: false,
-      },
-      {
-        name: 'Send Message',
-        icon: <MessageSquare size={20} />,
-        path: '/send-message',
-        hasSubmenu: true,
-        submenu: [
-          { name: 'Send SMS', icon: <MessageSquare size={18} />, path: '/send-sms' },
-          { name: 'Audio Message', icon: <Volume2 size={18} />, path: '/audio-message' },
-        ],
-      },
-      {
-        name: 'Voice Calls',
-        icon: <Phone size={20} />,
-        path: '/voice-calls',
-        hasSubmenu: false,
-      },
-      {
-        name: 'Contact Groups',
-        icon: <Users size={20} />,
-        path: '/groups',
-        hasSubmenu: false,
-      },
-      {
-        name: 'Scheduled',
-        icon: <Calendar size={20} />,
-        path: '/scheduled',
-        hasSubmenu: false,
-      },
-      {
-        name: 'Analytics',
-        icon: <BarChart3 size={20} />,
-        path: '/analytics',
-        hasSubmenu: false,
-      },
-      {
-        name: 'Balance',
-        icon: <Wallet size={20} />,
-        path: '/balance',
-        hasSubmenu: false,
-      },
-      {
-        name: 'Settings',
-        icon: <Settings size={20} />,
-        path: '/settings',
-        hasSubmenu: false,
-      },
+      { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
+    { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
+    { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
+    { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
+    { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
+    { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
+    { name: "Groups", icon: <Users size={20} />, path: "/groups" },
+    { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
+    { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
     ],
     []
   );
@@ -164,23 +124,6 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
     }
     return actualPath === link.path || (link.path !== '/' && actualPath.startsWith(link.path));
   };
-
-  // Expand submenus when a submenu item is active
-  useEffect(() => {
-    sidebarLinks.forEach((link) => {
-      if (link.hasSubmenu && link.submenu) {
-        const isSubmenuActive = link.submenu.some(
-          (subItem) =>
-            actualPath === subItem.path ||
-            (subItem.path !== '/' && actualPath.startsWith(subItem.path))
-        );
-
-        if (isSubmenuActive && !expandedMenus.includes(link.name)) {
-          setExpandedMenus((prev) => [...prev, link.name]);
-        }
-      }
-    });
-  }, [actualPath, expandedMenus, sidebarLinks]);
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -225,84 +168,25 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
           <ul className="space-y-1">
             {sidebarLinks.map((link) => (
               <li key={link.name}>
-                {!link.hasSubmenu ? (
-                  <Link
-                    to={link.path}
-                    className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
-                      isPathActive(link)
-                        ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                <Link
+                  to={link.path}
+                  className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
+                    link.path === actualPath
+                      ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`mr-3 ${
+                      link.path === actualPath
+                        ? 'text-jaylink-600 dark:text-jaylink-400'
+                        : 'text-gray-500 dark:text-gray-400'
                     }`}
                   >
-                    <span
-                      className={`mr-3 ${
-                        isPathActive(link)
-                          ? 'text-jaylink-600 dark:text-jaylink-400'
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}
-                    >
-                      {link.icon}
-                    </span>
-                    <span className="font-medium">{link.name}</span>
-                  </Link>
-                ) : (
-                  <div>
-                    <button
-                      onClick={() => toggleSubMenu(link.name)}
-                      className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors ${
-                        isPathActive(link) || expandedMenus.includes(link.name)
-                          ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      <div className="flex items-center">
-                        <span
-                          className={`mr-3 ${
-                            isPathActive(link) || expandedMenus.includes(link.name)
-                              ? 'text-jaylink-600 dark:text-jaylink-400'
-                              : 'text-gray-500 dark:text-gray-400'
-                          }`}
-                        >
-                          {link.icon}
-                        </span>
-                        <span className="font-medium">{link.name}</span>
-                      </div>
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform ${
-                          expandedMenus.includes(link.name) ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-
-                    {expandedMenus.includes(link.name) && link.submenu && (
-                      <ul className="pl-10 mt-1 space-y-1">
-                        {link.submenu.map((subItem) => (
-                          <li key={subItem.name}>
-                            <Link
-                              to={subItem.path}
-                              className={`flex items-center px-3 py-2 rounded-lg transition-colors ${
-                                subItem.path === actualPath
-                                  ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
-                                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                              }`}
-                            >
-                              <span
-                                className={`mr-3 ${
-                                  subItem.path === actualPath
-                                    ? 'text-jaylink-600 dark:text-jaylink-400'
-                                    : 'text-gray-500 dark:text-gray-400'
-                                }`}
-                              >
-                                {subItem.icon}
-                              </span>
-                              <span className="font-medium text-sm">{subItem.name}</span>
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
+                    {link.icon}
+                  </span>
+                  <span className="font-medium">{link.name}</span>
+                </Link>
               </li>
             ))}
           </ul>
@@ -342,89 +226,29 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               </div>
             </div>
 
-            {/* Mobile Navigation */}
             <nav className="flex-1 px-3 py-4 overflow-y-auto">
               <ul className="space-y-1">
                 {sidebarLinks.map((link) => (
                   <li key={link.name}>
-                    {!link.hasSubmenu ? (
-                      <Link
-                        to={link.path}
-                        className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
-                          isPathActive(link)
-                            ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    <Link
+                      to={link.path}
+                      className={`flex items-center px-3 py-3 rounded-lg transition-colors ${
+                        link.path === '/balance'
+                          ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <span
+                        className={`mr-3 ${
+                          link.path === '/balance'
+                            ? 'text-jaylink-600 dark:text-jaylink-400'
+                            : 'text-gray-500 dark:text-gray-400'
                         }`}
                       >
-                        <span
-                          className={`mr-3 ${
-                            isPathActive(link)
-                              ? 'text-jaylink-600 dark:text-jaylink-400'
-                              : 'text-gray-500 dark:text-gray-400'
-                          }`}
-                        >
-                          {link.icon}
-                        </span>
-                        <span className="font-medium">{link.name}</span>
-                      </Link>
-                    ) : (
-                      <div>
-                        <button
-                          onClick={() => toggleSubMenu(link.name)}
-                          className={`flex items-center justify-between w-full px-3 py-3 rounded-lg transition-colors ${
-                            isPathActive(link) || expandedMenus.includes(link.name)
-                              ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
-                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                          }`}
-                        >
-                          <div className="flex items-center">
-                            <span
-                              className={`mr-3 ${
-                                isPathActive(link) || expandedMenus.includes(link.name)
-                                  ? 'text-jaylink-600 dark:text-jaylink-400'
-                                  : 'text-gray-500 dark:text-gray-400'
-                              }`}
-                            >
-                              {link.icon}
-                            </span>
-                            <span className="font-medium">{link.name}</span>
-                          </div>
-                          <ChevronRight
-                            className={`h-4 w-4 transition-transform ${
-                              expandedMenus.includes(link.name) ? 'rotate-90' : ''
-                            }`}
-                          />
-                        </button>
-
-                        {expandedMenus.includes(link.name) && link.submenu && (
-                          <ul className="pl-10 mt-1 space-y-1">
-                            {link.submenu.map((subItem) => (
-                              <li key={subItem.name}>
-                                <Link
-                                  to={subItem.path}
-                                  className={`flex items-center px-3 py-2 rounded-lg transition-colors ${
-                                    subItem.path === actualPath
-                                      ? 'bg-jaylink-50 text-jaylink-700 dark:bg-jaylink-900/20 dark:text-jaylink-300'
-                                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                  }`}
-                                >
-                                  <span
-                                    className={`mr-3 ${
-                                      subItem.path === actualPath
-                                        ? 'text-jaylink-600 dark:text-jaylink-400'
-                                        : 'text-gray-500 dark:text-gray-400'
-                                    }`}
-                                  >
-                                    {subItem.icon}
-                                  </span>
-                                  <span className="font-medium text-sm">{subItem.name}</span>
-                                </Link>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
+                        {link.icon}
+                      </span>
+                      <span className="font-medium">{link.name}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -488,75 +312,19 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h1>
             </div>
             <div className="flex items-center space-x-2">
-              {/* Notifications Dropdown */}
-              <DropdownMenu
-                open={notificationsOpen}
-                onOpenChange={(open) => {
-                  setNotificationsOpen(open);
-                  if (open) setHasNewNotifications(false);
-                }}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell size={20} />
-                    {hasNewNotifications && (
-                      <span className="absolute top-1 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <div className="flex items-center justify-between p-4 border-b">
-                    <h3 className="font-medium">Notifications</h3>
-                    <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-xs">
-                      Mark all as read
-                    </Button>
-                  </div>
-                  <div className="max-h-[300px] overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500">No notifications</div>
-                    ) : (
-                      notifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className={`p-4 border-b hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                            !notification.read ? 'bg-jaylink-50 dark:bg-jaylink-900/10' : ''
-                          }`}
-                        >
-                          <div className="flex justify-between items-start">
-                            <h4 className="font-medium text-sm">{notification.title}</h4>
-                            <span className="text-xs text-gray-500">{notification.time}</span>
-                          </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            {notification.description}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="p-2 border-t text-center">
-                    <Link
-                      to="/notifications"
-                      className="text-sm text-jaylink-600 hover:text-jaylink-700 dark:text-jaylink-400 dark:hover:text-jaylink-300"
-                    >
-                      View all notifications
-                    </Link>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
+              <Button variant="outline" size="sm" className="text-sm hidden sm:flex">
+                <Plus className="mr-2 h-4 w-4" />
+                Top Up
+              </Button>
               <Link to="/">
                 <Button variant="ghost" size="icon">
                   <Home size={20} />
                 </Button>
               </Link>
-              <Link to="/settings">
-                <Button variant="ghost" size="icon">
-                  <Settings size={20} />
-                </Button>
-              </Link>
-              <div className="w-8 h-8 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600 md:hidden">
-                <User size={16} />
-              </div>
+              <NotificationMenu />
+              <Button variant="ghost" size="icon">
+                <Settings size={20} />
+              </Button>
             </div>
           </div>
         </motion.header>

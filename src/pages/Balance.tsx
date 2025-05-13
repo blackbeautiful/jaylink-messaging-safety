@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   MessageSquare,
   Phone,
+  Upload,
   Settings,
   LogOut,
   User,
@@ -31,16 +32,9 @@ const Balance = () => {
 
   const sidebarLinks = [
     { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
-    { 
-      name: "Send Message", 
-      icon: <MessageSquare size={20} />, 
-      path: "/send-message",
-      subItems: [
-        { name: "Send SMS", path: "/send-sms" },
-        { name: "Audio Message", path: "/audio-message" },
-      ]
-    },
+    { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
     { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
+    { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
     { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
     { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
     { name: "Groups", icon: <Users size={20} />, path: "/groups" },
@@ -83,36 +77,7 @@ const Balance = () => {
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <ul className="space-y-1">
             {sidebarLinks.map((link) => 
-              link.subItems ? (
-                <li key={link.name}>
-                  <Accordion type="single" collapsible className="border-none">
-                    <AccordionItem value="send-message" className="border-none">
-                      <AccordionTrigger className="flex items-center px-3 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                        <div className="flex items-center">
-                          <span className="mr-3 text-gray-500 dark:text-gray-400">
-                            {link.icon}
-                          </span>
-                          <span className="font-medium">{link.name}</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="pl-9 space-y-1">
-                          {link.subItems.map((subItem) => (
-                            <Link
-                              key={subItem.name}
-                              to={subItem.path}
-                              className="flex items-center py-2 px-3 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                            >
-                              <ChevronRight size={14} className="mr-2 text-gray-400" />
-                              {subItem.name}
-                            </Link>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </li>
-              ) : (
+              (
                 <li key={link.name}>
                   <Link
                     to={link.path}

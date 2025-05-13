@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import MobileDashboardMenu from "@/components/MobileDashboardMenu";
+import NotificationMenu from "@/components/NotificationMenu";
 import {
   MessageSquare,
   Phone,
@@ -20,6 +22,8 @@ import {
   Trash2,
   Search,
   Loader2,
+  Users,
+  Plus,
 } from "lucide-react";
 import {
   Card,
@@ -92,11 +96,12 @@ const Scheduled = () => {
   
   const sidebarLinks = [
     { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
-    { name: "Send SMS", icon: <MessageSquare size={20} />, path: "/send-sms" },
+    { name: "Send Message", icon: <MessageSquare size={20} />, path: "/send-sms"},
     { name: "Voice Calls", icon: <Phone size={20} />, path: "/voice-calls" },
     { name: "Upload Audio", icon: <Upload size={20} />, path: "/upload-audio" },
     { name: "Analytics", icon: <BarChart3 size={20} />, path: "/analytics" },
     { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
+    { name: "Groups", icon: <Users size={20} />, path: "/groups" },
     { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
     { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
   ];
@@ -127,12 +132,27 @@ const Scheduled = () => {
         transition={{ duration: 0.5 }}
         className="hidden md:flex w-64 flex-col fixed inset-y-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700"
       >
-        <div className="p-6">
-          <Link to="/" className="flex items-center space-x-2">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <Link to="/" className="flex items-center space-x-2 mb-4">
             <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
               Jay<span className="text-jaylink-600">Link</span>
             </span>
           </Link>
+          
+          {/* User info moved to the top under logo */}
+          <div className="flex items-center">
+            <div className="w-10 h-10 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600 mr-3">
+              <User size={20} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                John Doe
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                john@example.com
+              </p>
+            </div>
+          </div>
         </div>
 
         <nav className="flex-1 px-3 py-4">
@@ -196,9 +216,7 @@ const Scheduled = () => {
         >
           <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
             <div className="flex items-center">
-              <Button variant="ghost" size="icon" className="md:hidden mr-2">
-                <Calendar size={20} />
-              </Button>
+              <MobileDashboardMenu userName="John Doe" userEmail="john@example.com" />
               <Link to="/dashboard" className="inline-flex items-center text-gray-500 hover:text-gray-700 mr-4">
                 <ArrowLeft size={18} />
               </Link>
@@ -207,17 +225,19 @@ const Scheduled = () => {
               </h1>
             </div>
             <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" className="text-sm hidden sm:flex">
+                <Plus className="mr-2 h-4 w-4" />
+                Top Up
+              </Button>
               <Link to="/">
                 <Button variant="ghost" size="icon">
                   <Home size={20} />
                 </Button>
               </Link>
+              <NotificationMenu />
               <Button variant="ghost" size="icon">
                 <Settings size={20} />
               </Button>
-              <div className="w-8 h-8 rounded-full bg-jaylink-100 flex items-center justify-center text-jaylink-600 md:hidden">
-                <User size={16} />
-              </div>
             </div>
           </div>
         </motion.header>

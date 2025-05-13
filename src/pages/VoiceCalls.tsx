@@ -1,7 +1,7 @@
 
 import { useEffect } from "react";
 import VoiceCallForm from "@/components/VoiceCallForm";
-import AppLayout from "@/components/layout/AppLayout";
+import DashboardLayout from "@/components/DashboardLayout";
 
 const VoiceCalls = () => {
   useEffect(() => {
@@ -9,9 +9,9 @@ const VoiceCalls = () => {
   }, []);
 
   return (
-    <AppLayout title="Voice Calls" currentPath="/voice-calls">
+    <DashboardLayout title="Voice Calls" backLink="/dashboard" currentPath="/voice-calls">
       <VoiceCallForm />
-    </AppLayout>
+    </DashboardLayout>
   );
 };
 

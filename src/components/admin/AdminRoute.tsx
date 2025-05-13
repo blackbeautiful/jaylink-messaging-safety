@@ -1,12 +1,12 @@
-
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 const AdminRoute = () => {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -20,11 +20,7 @@ const AdminRoute = () => {
       } catch (error) {
         console.error("Error checking admin status:", error);
         setIsAdmin(false);
-        toast({
-          variant: "destructive",
-          title: "Authentication Error",
-          description: "Could not verify admin privileges.",
-        });
+        toast.error("Could not verify admin privileges.");
       } finally {
         setLoading(false);
       }
@@ -42,7 +38,8 @@ const AdminRoute = () => {
     );
   }
 
-  return isAdmin ? <Outlet /> : <Navigate to="/jayadminlink/login" />;
+  // If not admin, redirect to login with the return URL
+  return isAdmin ? <Outlet /> : <Navigate to="/jayadminlink/login" state={{ from: location }} replace />;
 };
 
 export default AdminRoute;

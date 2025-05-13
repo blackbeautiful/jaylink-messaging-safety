@@ -1,8 +1,7 @@
-
 import { useEffect } from "react";
-import SettingsForm from "@/components/SettingsForm";
-import DashboardLayout from "@/components/DashboardLayout";
 import { useLocation } from "react-router-dom";
+import DashboardLayout from "@/components/DashboardLayout";
+import SettingsForm from "@/components/SettingsForm";
 
 const Settings = () => {
   const location = useLocation();

@@ -1,6 +1,5 @@
-
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Lock } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { Lock, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
+// Define login form schema
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
@@ -36,6 +36,10 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 const AdminLogin = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // If redirected from a protected route, get the redirect path
+  const from = location.state?.from?.pathname || "/jayadminlink/dashboard";
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -54,25 +58,15 @@ const AdminLogin = () => {
         // Set admin token in localStorage
         localStorage.setItem("adminToken", "mock-admin-token");
         
-        toast({
-          title: "Success",
-          description: "You have successfully logged in as admin.",
-        });
+        toast.success("You have successfully logged in as admin.");
         
-        navigate("/jayadminlink/dashboard");
+        // Navigate to the intended destination or dashboard
+        navigate(from, { replace: true });
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Invalid admin credentials.",
-        });
+        toast.error("Invalid admin credentials.");
       }
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "An error occurred during login.",
-      });
+      toast.error("An error occurred during login.");
     } finally {
       setIsLoading(false);
     }
@@ -100,6 +94,9 @@ const AdminLogin = () => {
             <CardTitle>Admin Login</CardTitle>
             <CardDescription>
               Enter your credentials to access the admin dashboard
+              <div className="mt-2 text-xs p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+                <span className="font-semibold">Demo credentials:</span> username: <span className="font-mono">admin</span>, password: <span className="font-mono">admin123</span>
+              </div>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -133,10 +130,17 @@ const AdminLogin = () => {
                 />
                 <Button 
                   type="submit" 
-                  className="w-full" 
+                  className="w-full bg-jaylink-600 hover:bg-jaylink-700" 
                   disabled={isLoading}
                 >
-                  {isLoading ? "Logging in..." : "Log in"}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Logging in...
+                    </>
+                  ) : (
+                    "Log in"
+                  )}
                 </Button>
               </form>
             </Form>

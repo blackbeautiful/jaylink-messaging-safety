@@ -1,8 +1,7 @@
-
 import { useEffect } from "react";
-import MessageForm from "@/components/MessageForm";
-import DashboardLayout from "@/components/DashboardLayout";
 import { useLocation } from "react-router-dom";
+import DashboardLayout from "@/components/DashboardLayout";
+import MessageForm from "@/components/MessageForm";
 
 const SendSMS = () => {
   const location = useLocation();
@@ -13,7 +12,7 @@ const SendSMS = () => {
 
   return (
     <DashboardLayout 
-      title="Send Messages" 
+      title="Send SMS" 
       backLink="/dashboard"
       currentPath={location.pathname}
     >

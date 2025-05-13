@@ -1,4 +1,3 @@
-
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -17,6 +16,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { useTheme } from "@/components/ThemeProvider";
+import { Moon, Sun, Monitor } from "lucide-react";
+import {
+  RadioGroup,
+  RadioGroupItem
+} from "@/components/ui/radio-group";
 
 // Define form schema for profile settings
 const profileFormSchema = z.object({
@@ -43,12 +48,22 @@ const securityFormSchema = z.object({
   twoFactorAuth: z.boolean().default(false),
 });
 
+// Define form schema for appearance settings
+const appearanceFormSchema = z.object({
+  theme: z.enum(["light", "dark", "system"]),
+  reducedMotion: z.boolean().default(false),
+  compactView: z.boolean().default(false),
+  highContrast: z.boolean().default(false),
+});
+
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 type NotificationFormValues = z.infer<typeof notificationFormSchema>;
 type SecurityFormValues = z.infer<typeof securityFormSchema>;
+type AppearanceFormValues = z.infer<typeof appearanceFormSchema>;
 
 const SettingsForm = () => {
   const [isUpdating, setIsUpdating] = useState(false);
+  const { theme, setTheme } = useTheme();
   
   // Initialize forms with default values
   const profileForm = useForm<ProfileFormValues>({
@@ -79,6 +94,16 @@ const SettingsForm = () => {
       newPassword: "",
       confirmPassword: "",
       twoFactorAuth: false,
+    },
+  });
+  
+  const appearanceForm = useForm<AppearanceFormValues>({
+    resolver: zodResolver(appearanceFormSchema),
+    defaultValues: {
+      theme: theme as "light" | "dark" | "system",
+      reducedMotion: false,
+      compactView: false,
+      highContrast: false,
     },
   });
   
@@ -172,12 +197,41 @@ const SettingsForm = () => {
     }
   };
   
+  // Handle appearance form submission
+  const onAppearanceSubmit = async (data: AppearanceFormValues) => {
+    try {
+      setIsUpdating(true);
+      
+      // Update theme immediately
+      setTheme(data.theme);
+      
+      // Simulate API call for other settings
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log("Updating appearance settings:", data);
+      
+      toast({
+        title: "Appearance settings updated",
+        description: "Your interface preferences have been saved",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Failed to update appearance settings",
+        description: "There was a problem updating your appearance settings",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+  
   return (
     <Tabs defaultValue="profile" className="space-y-6">
-      <TabsList className="grid grid-cols-3 w-full md:w-auto">
+      <TabsList className="grid grid-cols-4 w-full md:w-auto">
         <TabsTrigger value="profile">Profile</TabsTrigger>
         <TabsTrigger value="notifications">Notifications</TabsTrigger>
         <TabsTrigger value="security">Security</TabsTrigger>
+        <TabsTrigger value="appearance">Appearance</TabsTrigger>
       </TabsList>
       
       {/* Profile Settings */}
@@ -462,6 +516,145 @@ const SettingsForm = () => {
                 disabled={isUpdating}
               >
                 {isUpdating ? "Updating..." : "Update Security Settings"}
+              </Button>
+            </form>
+          </Form>
+        </div>
+      </TabsContent>
+      
+      {/* Appearance Settings */}
+      <TabsContent value="appearance" className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-6">
+            Interface Appearance
+          </h3>
+          
+          <Form {...appearanceForm}>
+            <form onSubmit={appearanceForm.handleSubmit(onAppearanceSubmit)} className="space-y-6">
+              <FormField
+                control={appearanceForm.control}
+                name="theme"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormLabel>Theme</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="grid grid-cols-3 gap-4"
+                      >
+                        <FormItem>
+                          <FormLabel className="[&:has([data-state=checked])>div]:border-jaylink-600 [&:has([data-state=checked])>div]:text-jaylink-600 dark:[&:has([data-state=checked])>div]:border-jaylink-400 dark:[&:has([data-state=checked])>div]:text-jaylink-400">
+                            <FormControl>
+                              <RadioGroupItem value="light" className="sr-only" />
+                            </FormControl>
+                            <div className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-white p-4 hover:border-jaylink-400 cursor-pointer">
+                              <Sun className="mb-3 h-6 w-6" />
+                              <span className="text-sm font-medium">Light</span>
+                            </div>
+                          </FormLabel>
+                        </FormItem>
+                        <FormItem>
+                          <FormLabel className="[&:has([data-state=checked])>div]:border-jaylink-600 [&:has([data-state=checked])>div]:text-jaylink-600 dark:[&:has([data-state=checked])>div]:border-jaylink-400 dark:[&:has([data-state=checked])>div]:text-jaylink-400">
+                            <FormControl>
+                              <RadioGroupItem value="dark" className="sr-only" />
+                            </FormControl>
+                            <div className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-gray-900 text-white p-4 hover:border-jaylink-400 cursor-pointer">
+                              <Moon className="mb-3 h-6 w-6" />
+                              <span className="text-sm font-medium">Dark</span>
+                            </div>
+                          </FormLabel>
+                        </FormItem>
+                        <FormItem>
+                          <FormLabel className="[&:has([data-state=checked])>div]:border-jaylink-600 [&:has([data-state=checked])>div]:text-jaylink-600 dark:[&:has([data-state=checked])>div]:border-jaylink-400 dark:[&:has([data-state=checked])>div]:text-jaylink-400">
+                            <FormControl>
+                              <RadioGroupItem value="system" className="sr-only" />
+                            </FormControl>
+                            <div className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-gray-50 dark:bg-gray-800 p-4 hover:border-jaylink-400 cursor-pointer">
+                              <Monitor className="mb-3 h-6 w-6" />
+                              <span className="text-sm font-medium">System</span>
+                            </div>
+                          </FormLabel>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormDescription>
+                      Choose a theme for your interface
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={appearanceForm.control}
+                name="reducedMotion"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Reduced Motion</FormLabel>
+                      <FormDescription>
+                        Minimize animation effects throughout the interface
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={appearanceForm.control}
+                name="compactView"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Compact View</FormLabel>
+                      <FormDescription>
+                        Display more content with smaller spacing
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={appearanceForm.control}
+                name="highContrast"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">High Contrast</FormLabel>
+                      <FormDescription>
+                        Increase color contrast for better visibility
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <Button 
+                type="submit" 
+                className="bg-jaylink-600 hover:bg-jaylink-700"
+                disabled={isUpdating}
+              >
+                {isUpdating ? "Saving..." : "Save Appearance Settings"}
               </Button>
             </form>
           </Form>

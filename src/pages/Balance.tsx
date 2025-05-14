@@ -16,7 +16,8 @@ const Balance = () => {
       backLink="/dashboard"
       currentPath={location.pathname}
     >
-      <div className="max-w-6xl mx-auto">
+      {/* Removed fixed width constraint to make it fully responsive */}
+      <div className="w-full">
         <BalanceOverview />
       </div>
     </DashboardLayout>

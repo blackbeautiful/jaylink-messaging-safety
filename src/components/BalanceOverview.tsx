@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -90,7 +89,8 @@ const BalanceOverview = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Changed grid gap and added better responsive behavior */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -99,11 +99,11 @@ const BalanceOverview = () => {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Current Balance</CardDescription>
-              <CardTitle className="text-4xl font-bold text-jaylink-700">₦5,950</CardTitle>
+              <CardTitle className="text-2xl sm:text-4xl font-bold text-jaylink-700">₦5,950</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-center">
-                <p className="text-sm text-gray-500">Updated just now</p>
+                <p className="text-xs sm:text-sm text-gray-500">Updated just now</p>
                 <Dialog open={showDialog} onOpenChange={setShowDialog}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="bg-jaylink-600 hover:bg-jaylink-700">
@@ -111,7 +111,7 @@ const BalanceOverview = () => {
                       Top Up
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-[425px] w-[90vw] max-w-[90vw] sm:w-auto">
                     <DialogHeader>
                       <DialogTitle>Top Up Balance</DialogTitle>
                       <DialogDescription>
@@ -133,7 +133,7 @@ const BalanceOverview = () => {
                         </div>
                         <div className="space-y-2">
                           <Label>Payment Method</Label>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <Button type="button" variant="outline" className="justify-start">
                               <CreditCard className="mr-2 h-4 w-4" />
                               Credit Card
@@ -145,8 +145,8 @@ const BalanceOverview = () => {
                           </div>
                         </div>
                       </div>
-                      <DialogFooter>
-                        <Button type="submit" disabled={loading} className="bg-jaylink-600 hover:bg-jaylink-700">
+                      <DialogFooter className="flex-col sm:flex-row">
+                        <Button type="submit" disabled={loading} className="bg-jaylink-600 hover:bg-jaylink-700 w-full">
                           {loading ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -173,12 +173,12 @@ const BalanceOverview = () => {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Money In</CardDescription>
-              <CardTitle className="text-2xl font-bold text-green-600">₦7,000</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-green-600">₦7,000</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center">
                 <ArrowUpRight className="h-4 w-4 text-green-500 mr-2" />
-                <p className="text-sm text-gray-500">Total top-ups this month</p>
+                <p className="text-xs sm:text-sm text-gray-500">Total top-ups this month</p>
               </div>
             </CardContent>
           </Card>
@@ -188,16 +188,17 @@ const BalanceOverview = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
+          className="sm:col-span-2 lg:col-span-1" // Full width on mobile, half on tablet, 1/3 on desktop
         >
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Money Out</CardDescription>
-              <CardTitle className="text-2xl font-bold text-red-600">₦1,050</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-red-600">₦1,050</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center">
                 <ArrowDownRight className="h-4 w-4 text-red-500 mr-2" />
-                <p className="text-sm text-gray-500">Total spending this month</p>
+                <p className="text-xs sm:text-sm text-gray-500">Total spending this month</p>
               </div>
             </CardContent>
           </Card>
@@ -218,7 +219,8 @@ const BalanceOverview = () => {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="all" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-6">
+              {/* Changed tabs layout to be more mobile friendly */}
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-6">
                 <TabsTrigger value="all">All</TabsTrigger>
                 <TabsTrigger value="topup">Top Ups</TabsTrigger>
                 <TabsTrigger value="sms">SMS</TabsTrigger>
@@ -226,152 +228,160 @@ const BalanceOverview = () => {
               </TabsList>
               
               <TabsContent value="all">
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              transaction.type === "topup"
-                                ? "bg-green-100 text-green-800"
-                                : transaction.type === "sms"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-purple-100 text-purple-800"
-                            }`}>
-                              {transaction.type === "topup" ? "Top Up" : 
-                                transaction.type === "sms" ? "SMS" : "Voice"}
-                            </span>
-                          </TableCell>
-                          <TableCell className={`text-right ${
-                            transaction.amount > 0 ? "text-green-600" : "text-red-600"
-                          }`}>
-                            {transaction.amount > 0 ? "+" : ""}
-                            ₦{Math.abs(transaction.amount).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            ₦{transaction.balance.toLocaleString()}
-                          </TableCell>
+                <div className="border rounded-lg">
+                  <div className="overflow-x-auto w-full"> {/* Critical for mobile scrolling */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
+                          <TableHead className="whitespace-nowrap">Description</TableHead>
+                          <TableHead className="whitespace-nowrap">Type</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Balance</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="whitespace-nowrap font-medium">{transaction.date}</TableCell>
+                            <TableCell className="whitespace-nowrap">{transaction.description}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                transaction.type === "topup"
+                                  ? "bg-green-100 text-green-800"
+                                  : transaction.type === "sms"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-purple-100 text-purple-800"
+                              }`}>
+                                {transaction.type === "topup" ? "Top Up" : 
+                                  transaction.type === "sms" ? "SMS" : "Voice"}
+                              </span>
+                            </TableCell>
+                            <TableCell className={`text-right whitespace-nowrap ${
+                              transaction.amount > 0 ? "text-green-600" : "text-red-600"
+                            }`}>
+                              {transaction.amount > 0 ? "+" : ""}
+                              ₦{Math.abs(transaction.amount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-medium">
+                              ₦{transaction.balance.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </TabsContent>
               
               <TabsContent value="topup">
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.filter(t => t.type === "topup").map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-                              Top Up
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-green-600">
-                            +₦{Math.abs(transaction.amount).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            ₦{transaction.balance.toLocaleString()}
-                          </TableCell>
+                <div className="border rounded-lg">
+                  <div className="overflow-x-auto w-full"> {/* Critical for mobile scrolling */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
+                          <TableHead className="whitespace-nowrap">Description</TableHead>
+                          <TableHead className="whitespace-nowrap">Type</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Balance</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.filter(t => t.type === "topup").map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="whitespace-nowrap font-medium">{transaction.date}</TableCell>
+                            <TableCell className="whitespace-nowrap">{transaction.description}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Top Up
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap text-green-600">
+                              +₦{Math.abs(transaction.amount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-medium">
+                              ₦{transaction.balance.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </TabsContent>
               
               <TabsContent value="sms">
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.filter(t => t.type === "sms").map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                              SMS
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-red-600">
-                            ₦{Math.abs(transaction.amount).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            ₦{transaction.balance.toLocaleString()}
-                          </TableCell>
+                <div className="border rounded-lg">
+                  <div className="overflow-x-auto w-full"> {/* Critical for mobile scrolling */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
+                          <TableHead className="whitespace-nowrap">Description</TableHead>
+                          <TableHead className="whitespace-nowrap">Type</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Balance</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.filter(t => t.type === "sms").map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="whitespace-nowrap font-medium">{transaction.date}</TableCell>
+                            <TableCell className="whitespace-nowrap">{transaction.description}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                SMS
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap text-red-600">
+                              ₦{Math.abs(transaction.amount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-medium">
+                              ₦{transaction.balance.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </TabsContent>
               
               <TabsContent value="voice">
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.filter(t => t.type === "voice").map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>
-                            <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                              Voice
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right text-red-600">
-                            ₦{Math.abs(transaction.amount).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            ₦{transaction.balance.toLocaleString()}
-                          </TableCell>
+                <div className="border rounded-lg">
+                  <div className="overflow-x-auto w-full"> {/* Critical for mobile scrolling */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="whitespace-nowrap">Date</TableHead>
+                          <TableHead className="whitespace-nowrap">Description</TableHead>
+                          <TableHead className="whitespace-nowrap">Type</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Balance</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.filter(t => t.type === "voice").map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="whitespace-nowrap font-medium">{transaction.date}</TableCell>
+                            <TableCell className="whitespace-nowrap">{transaction.description}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                Voice
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap text-red-600">
+                              ₦{Math.abs(transaction.amount).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-medium">
+                              ₦{transaction.balance.toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </TabsContent>
             </Tabs>

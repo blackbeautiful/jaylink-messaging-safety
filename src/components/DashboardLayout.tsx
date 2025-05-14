@@ -176,7 +176,8 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    // Changed from h-screen to min-h-screen to prevent fixed height issues
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Desktop Sidebar */}
       <motion.aside
         initial={{ x: -100, opacity: 0 }}
@@ -332,8 +333,8 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
         </SheetContent>
       </Sheet>
 
-      {/* Main Content Area */}
-      <div className="flex-1 md:ml-64">
+      {/* Main Content Area - Add overflow-x-hidden to prevent horizontal scrolling */}
+      <div className="flex-1 w-full md:ml-64 flex flex-col overflow-x-hidden">
         <motion.header
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -450,13 +451,13 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
           </div>
         </motion.header>
 
-        {/* Main Content */}
-        <main className="p-4 sm:p-6 md:p-8">{children}</main>
+        {/* Main Content - Add auto to allow content to scroll when necessary */}
+        <main className="flex-1 w-full p-4 sm:p-6 md:p-8 overflow-auto">{children}</main>
       </div>
 
       {/* Top Up Dialog */}
       <Dialog open={topUpDialogOpen} onOpenChange={setTopUpDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] w-[95%] mx-auto">
           <DialogHeader>
             <DialogTitle>Top Up Balance</DialogTitle>
             <DialogDescription>
@@ -489,11 +490,11 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <Button
               onClick={handleTopUp}
               disabled={loading}
-              className="bg-jaylink-600 hover:bg-jaylink-700"
+              className="bg-jaylink-600 hover:bg-jaylink-700 w-full"
             >
               {loading ? (
                 <>

@@ -4,9 +4,17 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
+import PrivateRoute from "./components/PrivateRoute";
+import AdminRoute from "./components/admin/AdminRoute";
+
+// Public pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import NotFound from "./pages/NotFound";
+
+// User pages
 import Dashboard from "./pages/Dashboard";
 import SendSMS from "./pages/SendSMS";
 import AudioMessage from "./pages/AudioMessage";
@@ -18,7 +26,6 @@ import Groups from "./pages/Groups";
 import Scheduled from "./pages/Scheduled";
 import PaymentPage from "./pages/PaymentPage";
 import Settings from "./pages/Settings";
-import NotFound from "./pages/NotFound";
 import UploadAudio from "./pages/UploadAudio";
 
 // Admin pages
@@ -30,7 +37,6 @@ import AdminTransactions from "./pages/admin/AdminTransactions";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminLayout from "./components/admin/AdminLayout";
-import AdminRoute from "./components/admin/AdminRoute";
 import AdminUserManagement from "./pages/admin/AdminUserManagement";
 
 const queryClient = new QueryClient();
@@ -42,23 +48,30 @@ const App = () => (
       <Sonner />
       <AnimatePresence mode="wait">
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/send-sms" element={<SendSMS />} />
-          <Route path="/audio-message" element={<AudioMessage />} />
-          <Route path="/voice-calls" element={<VoiceCalls />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/balance" element={<Balance />} />
-          <Route path="/support" element={<Support />} />
-          <Route path="/groups" element={<Groups />} />
-          <Route path="/scheduled" element={<Scheduled />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/payment" element={<PaymentPage />} />
-          <Route path="/upload-audio" element={<UploadAudio />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
 
-          {/* Admin Routes - Changed from /admin to /jayadminlink */}
+          {/* Protected User Routes */}
+          <Route element={<PrivateRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/send-sms" element={<SendSMS />} />
+            <Route path="/audio-message" element={<AudioMessage />} />
+            <Route path="/voice-calls" element={<VoiceCalls />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/balance" element={<Balance />} />
+            <Route path="/support" element={<Support />} />
+            <Route path="/groups" element={<Groups />} />
+            <Route path="/scheduled" element={<Scheduled />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/payment" element={<PaymentPage />} />
+            <Route path="/upload-audio" element={<UploadAudio />} />
+          </Route>
+
+          {/* Admin Routes */}
           <Route path="/jayadminlink/login" element={<AdminLogin />} />
           <Route element={<AdminRoute />}>
             <Route
@@ -123,9 +136,7 @@ const App = () => (
             />
           </Route>
 
-          {/* Redirect /login to the root path */}
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          {/* 404 Route */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AnimatePresence>

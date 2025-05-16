@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -24,6 +25,10 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import axios from "axios";
+
+// API URL from environment variables
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
 // Define login form schema
 const loginSchema = z.object({
@@ -52,21 +57,35 @@ const AdminLogin = () => {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
-      // In a real app, this would be an API call to verify admin credentials
-      // For this demo, we'll hardcode the admin credentials
-      if (data.username === "admin" && data.password === "admin123") {
-        // Set admin token in localStorage
-        localStorage.setItem("adminToken", "mock-admin-token");
+      // Call the admin login API
+      const response = await axios.post(`${API_URL}/admin/auth/login`, {
+        username: data.username,
+        password: data.password,
+      });
+      
+      if (response.data.success) {
+        // Store admin token
+        const { token, admin } = response.data.data;
+        localStorage.setItem("adminToken", token);
+        
+        // Store admin data if needed
+        localStorage.setItem("adminUser", JSON.stringify({
+          id: admin.id,
+          firstName: admin.firstName,
+          lastName: admin.lastName,
+          email: admin.email,
+          role: admin.role,
+        }));
         
         toast.success("You have successfully logged in as admin.");
         
         // Navigate to the intended destination or dashboard
         navigate(from, { replace: true });
       } else {
-        toast.error("Invalid admin credentials.");
+        toast.error(response.data.message || "Login failed");
       }
-    } catch (error) {
-      toast.error("An error occurred during login.");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Invalid admin credentials.");
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +128,7 @@ const AdminLogin = () => {
                     <FormItem>
                       <FormLabel>Username</FormLabel>
                       <FormControl>
-                        <Input placeholder="admin" {...field} />
+                        <Input placeholder="admin" {...field} disabled={isLoading} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -122,7 +141,7 @@ const AdminLogin = () => {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} />
+                        <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -146,7 +165,7 @@ const AdminLogin = () => {
             </Form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button variant="link" onClick={() => navigate("/")}>
+            <Button variant="link" onClick={() => navigate("/")} disabled={isLoading}>
               Return to User Login
             </Button>
           </CardFooter>

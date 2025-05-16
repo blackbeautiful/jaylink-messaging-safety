@@ -1,3 +1,4 @@
+// src/pages/admin/AdminDashboard.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, CreditCard, DollarSign, FileText, Users } from "lucide-react";
 import { Link } from "react-router-dom";

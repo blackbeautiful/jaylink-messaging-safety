@@ -1,3 +1,4 @@
+// src/pages/Settings.tsx
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";

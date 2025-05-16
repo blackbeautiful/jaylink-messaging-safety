@@ -1,4 +1,4 @@
-
+// src/pages/admin/AdminSettings.tsx
 import { useState } from "react";
 import {
   Card,

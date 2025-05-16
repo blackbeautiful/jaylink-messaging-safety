@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "jaylink_user",
+    "password": "jaylinkdev123",
+    "database": "jaylink_db",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "test": {
+    "username": "jaylink_user",
+    "password": "jaylinkdev123",
+    "database": "jaylink_db_test",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "jaylink_user",
+    "password": "jaylinkdev123",
+    "database": "jaylink_db",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}

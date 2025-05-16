@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Message Delivery Report</title>
+  <style>
+    /* Reset styles */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #333;
+      background-color: #f9f9f9;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #ffffff;
+    }
+    .header {
+      text-align: center;
+      padding: 20px 0;
+      border-bottom: 1px solid #eaeaea;
+    }
+    .logo {
+      color: #0284c7;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .content {
+      padding: 30px 20px;
+      line-height: 1.6;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      color: #888;
+      border-top: 1px solid #eaeaea;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background-color: #0284c7;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+    .report-info {
+      padding: 20px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      margin: 20px 0;
+    }
+    .stat-box {
+      flex: 1;
+      text-align: center;
+      padding: 15px;
+      margin: 0 5px;
+      border-radius: 4px;
+    }
+    .stat-box.total {
+      background-color: #e3f2fd;
+      border: 1px solid #90caf9;
+    }
+    .stat-box.delivered {
+      background-color: #e8f5e9;
+      border: 1px solid #a5d6a7;
+    }
+    .stat-box.failed {
+      background-color: #ffebee;
+      border: 1px solid #ef9a9a;
+    }
+    .stat-number {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .message-id {
+      font-family: monospace;
+      word-break: break-all;
+      background-color: #f0f0f0;
+      padding: 5px;
+      border-radius: 3px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #eaeaea;
+    }
+    th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">Jay<span style="color: #0369a1;">Link</span> SMS</div>
+    </div>
+    <div class="content">
+      <h2>Message Delivery Report</h2>
+      <p>Hello {{firstName}},</p>
+      <p>Here's the delivery report for your recent message campaign:</p>
+
+      <div class="report-info">
+        <p><strong>Message ID:</strong> <span class="message-id">{{messageId}}</span></p>
+        <p><strong>Sent Time:</strong> {{sentTime}}</p>
+        
+        <div class="stats">
+          <div class="stat-box total">
+            <div class="stat-number">{{recipients}}</div>
+            <div>Total Recipients</div>
+          </div>
+          <div class="stat-box delivered">
+            <div class="stat-number">{{delivered}}</div>
+            <div>Delivered</div>
+          </div>
+          <div class="stat-box failed">
+            <div class="stat-number">{{failed}}</div>
+            <div>Failed</div>
+          </div>
+        </div>
+      </div>
+
+      <p>For a detailed breakdown, including delivery status for each recipient, please visit your analytics dashboard:</p>
+      <div style="text-align: center;">
+        <a href="{{reportUrl}}" class="button">View Full Report</a>
+      </div>
+
+      <p>If you have any questions or concerns about this delivery report, please contact our support team.</p>
+      <p>Thank you for using JayLink SMS!</p>
+      <p>Best regards,<br>The JayLink Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; {{currentYear}} JayLink SMS. All rights reserved.</p>
+      <p>123 Messaging Street, Communication City</p>
+      <p>You received this notification because you have delivery reports enabled in your account settings.</p>
+    </div>
+  </div>
+</body>
+</html>

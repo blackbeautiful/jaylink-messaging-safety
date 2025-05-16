@@ -1,3 +1,4 @@
+// src/components/DashboardLayout.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ReactNode, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
@@ -44,6 +45,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import NotificationMenu from "@/components/NotificationMenu";
+import { useAuth } from '@/contexts/AuthContext';
 
 // Define the DashboardLayout props interface
 interface DashboardLayoutProps {
@@ -72,6 +74,7 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
   const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  const { logout, user } = useAuth();
 
   // Use provided currentPath or fall back to location.pathname
   const actualPath = currentPath || location.pathname;
@@ -170,10 +173,13 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
 
   // Sign out handler
   const handleSignOut = () => {
-    localStorage.removeItem('token');
-    toast.success('You have logged out successfully.');
-    navigate('/');
+    logout(); // Call the logout function from AuthContext
+    // No need to manually remove token or navigate - AuthContext handles this
   };
+
+  // Use user data from AuthContext instead of hardcoded values
+  const userName = user ? `${user.firstName} ${user.lastName}` : 'User';
+  const userEmail = user ? user.email : 'user@example.com';
 
   return (
     // Changed from h-screen to min-h-screen to prevent fixed height issues
@@ -197,8 +203,8 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
               <User size={20} />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">John Doe</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">john@example.com</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">{userName}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{userEmail}</p>
             </div>
           </div>
         </div>
@@ -268,8 +274,8 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
                   <User size={20} />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">John Doe</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">john@example.com</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{userName}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{userEmail}</p>
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-
+// src/config/api.ts
 // API Configuration
 
 export const SMS_API_CONFIG = {

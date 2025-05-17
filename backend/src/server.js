@@ -55,19 +55,45 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Handle SIGTERM signal
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
+  try {
+    // Close database connection
+    if (db.sequelize) {
+      logger.info('Closing database connections...');
+      await db.sequelize.close();
+      logger.info('Database connections closed successfully');
+    }
+    logger.info('Server shutdown complete');
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+  } finally {
+    process.exit(0);
+  }
 });
 
 // Handle SIGINT signal (Ctrl+C)
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
+  try {
+    // Close database connection
+    if (db.sequelize) {
+      logger.info('Closing database connections...');
+      await db.sequelize.close();
+      logger.info('Database connections closed successfully');
+    }
+    logger.info('Server shutdown complete');
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+  } finally {
+    process.exit(0);
+  }
 });
 
-// Start server
+// Start server (improved with graceful shutdown)
 const startServer = async () => {
+  let server;
+  
   try {
     // Sync database (in development only)
     if (config.env === 'development') {
@@ -83,7 +109,7 @@ const startServer = async () => {
     }
 
     // Start Express server
-    const server = app.listen(config.port, () => {
+    server = app.listen(config.port, () => {
       logger.info(`Server started on port ${config.port} (${config.env})`);
       logger.info(`API URL: ${config.apiUrl}`);
       logger.info(`Frontend URL: ${config.frontendUrl}`);
@@ -93,6 +119,54 @@ const startServer = async () => {
     server.on('error', (err) => {
       logger.error('Server error:', err);
       process.exit(1);
+    });
+
+    // Add graceful shutdown to server for SIGTERM
+    process.on('SIGTERM', async () => {
+      logger.info('SIGTERM received, shutting down gracefully');
+      
+      if (server) {
+        server.close(async () => {
+          logger.info('Express server closed');
+          
+          try {
+            // Close database connections
+            if (db.sequelize) {
+              logger.info('Closing database connections...');
+              await db.sequelize.close();
+              logger.info('Database connections closed successfully');
+            }
+          } catch (error) {
+            logger.error('Error closing database:', error);
+          } finally {
+            process.exit(0);
+          }
+        });
+      }
+    });
+
+    // Similar handler for SIGINT (Ctrl+C)
+    process.on('SIGINT', async () => {
+      logger.info('SIGINT received, shutting down gracefully');
+      
+      if (server) {
+        server.close(async () => {
+          logger.info('Express server closed');
+          
+          try {
+            // Close database connections
+            if (db.sequelize) {
+              logger.info('Closing database connections...');
+              await db.sequelize.close();
+              logger.info('Database connections closed successfully');
+            }
+          } catch (error) {
+            logger.error('Error closing database:', error);
+          } finally {
+            process.exit(0);
+          }
+        });
+      }
     });
 
   } catch (error) {

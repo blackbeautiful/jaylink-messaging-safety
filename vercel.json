@@ -5,7 +5,5 @@
       "destination": "/index.html"
     }
   ],
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm run build"
+  "cleanUrls": true
 }

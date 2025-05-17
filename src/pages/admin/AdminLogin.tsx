@@ -25,10 +25,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import axios from "axios";
 
-// API URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+// Import centralized API instance and utilities
+import { adminApi, apiUtils } from "@/config/api";
 
 // Define login form schema
 const loginSchema = z.object({
@@ -66,12 +65,8 @@ const AdminLogin = () => {
           return;
         }
         
-        // Verify the admin token
-        const response = await axios.get(`${API_URL}/admin/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${adminToken}`,
-          },
-        });
+        // Verify the admin token using centralized API
+        const response = await adminApi.get(apiUtils.endpoints.admin.me);
         
         if (response.data.success && response.data.data.admin.role === "admin") {
           // Already authenticated, redirect to admin dashboard
@@ -96,8 +91,8 @@ const AdminLogin = () => {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
-      // Call the admin login API
-      const response = await axios.post(`${API_URL}/admin/auth/login`, {
+      // Call the admin login API using centralized API
+      const response = await adminApi.post(apiUtils.endpoints.admin.login, {
         username: data.username,
         password: data.password,
       });
@@ -124,7 +119,9 @@ const AdminLogin = () => {
         toast.error(response.data.message || "Login failed");
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Invalid admin credentials.");
+      // Use centralized error handling
+      const errorMessage = apiUtils.handleError(error, "Invalid admin credentials.");
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

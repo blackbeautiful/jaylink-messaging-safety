@@ -112,8 +112,6 @@ const AuthForm = ({ type, redirectPath = '/dashboard' }: AuthFormProps) => {
       // Pass the rememberMe value as an optional parameter if your login function supports it
       await login(data.email, data.password);
 
-      toast.success('You have successfully logged in.');
-      
       // No need to navigate here - the AuthContext handles navigation
       // The login function will navigate to redirectPath
     } catch (error: any) {

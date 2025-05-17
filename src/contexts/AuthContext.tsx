@@ -1,45 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import axios from "axios";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
-// Create an axios instance for API calls
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
-
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Add token to requests if available
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Add response interceptor to handle authentication errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // If unauthorized (401) or forbidden (403), clear token and redirect to login
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      // Clear the token from localStorage
-      localStorage.removeItem("token");
-      
-      // We'll let the AuthProvider's useEffect handle the redirect
-      // This avoids navigation outside of React components
-    }
-    return Promise.reject(error);
-  }
-);
+// Import centralized API instance and utilities
+import { api, apiUtils } from "@/config/api";
 
 // Interface definitions
 interface User {
@@ -104,7 +69,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return false;
       }
 
-      const response = await api.get("/auth/me");
+      const response = await api.get(apiUtils.endpoints.auth.me);
       if (response.data.success) {
         setUser(response.data.data.user);
         return true;
@@ -153,7 +118,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const response = await api.post("/auth/login", { email, password });
+      const response = await api.post(apiUtils.endpoints.auth.login, { email, password });
       
       if (response.data.success) {
         const { token, user } = response.data.data;
@@ -163,6 +128,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Navigate to the previous page or dashboard
         const from = location.state?.from || "/dashboard";
         navigate(from, { replace: true });
+        
+        toast.success("You have successfully logged in.");
         return;
       }
       
@@ -170,6 +137,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (error) {
       console.error("Login error:", error);
       localStorage.removeItem("token");
+      
+      // Use centralized error handling
+      const errorMessage = apiUtils.handleError(error, "Invalid email or password. Please try again.");
+      toast.error(errorMessage);
+      
       throw error;
     } finally {
       setLoading(false);
@@ -180,7 +152,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const register = async (userData: RegisterData) => {
     setLoading(true);
     try {
-      const response = await api.post("/auth/register", userData);
+      const response = await api.post(apiUtils.endpoints.auth.register, userData);
       
       if (response.data.success) {
         // Just store the token but don't automatically log in
@@ -191,12 +163,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           state: { message: "Registration successful! Please log in." },
           replace: true 
         });
+        
+        toast.success("Your account has been created successfully.");
         return;
       }
       
       throw new Error(response.data.message || "Registration failed");
     } catch (error) {
       console.error("Registration error:", error);
+      
+      // Use centralized error handling
+      const errorMessage = apiUtils.handleError(error, "There was a problem creating your account. Please try again.");
+      toast.error(errorMessage);
+      
       throw error;
     } finally {
       setLoading(false);
@@ -209,7 +188,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const token = localStorage.getItem("token");
       if (token) {
-        await api.post("/auth/logout");
+        await api.post(apiUtils.endpoints.auth.logout);
       }
     } catch (error) {
       console.error("Logout error:", error);
@@ -221,16 +200,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       // Force navigation to login page
       navigate("/login", { replace: true });
+      
+      toast.success("You have been logged out successfully.");
     }
   };
 
   // Forgot password function
   const forgotPassword = async (email: string) => {
     try {
-      const response = await api.post("/auth/forgot-password", { email });
+      const response = await api.post(apiUtils.endpoints.auth.forgotPassword, { email });
+      
+      if (response.data.success) {
+        toast.success("Password reset instructions have been sent to your email.");
+      }
+      
       return response.data.success;
     } catch (error) {
       console.error("Forgot password error:", error);
+      
+      // Use centralized error handling
+      const errorMessage = apiUtils.handleError(error, "Failed to send reset instructions. Please try again.");
+      toast.error(errorMessage);
+      
       throw error;
     }
   };
@@ -238,10 +229,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Reset password function
   const resetPassword = async (token: string, password: string) => {
     try {
-      const response = await api.post("/auth/reset-password", { token, password });
+      const response = await api.post(apiUtils.endpoints.auth.resetPassword, { token, password });
+      
+      if (response.data.success) {
+        toast.success("Your password has been reset successfully. You can now log in.");
+      }
+      
       return response.data.success;
     } catch (error) {
       console.error("Reset password error:", error);
+      
+      // Use centralized error handling
+      const errorMessage = apiUtils.handleError(error, "Failed to reset password. Please try again.");
+      toast.error(errorMessage);
+      
       throw error;
     }
   };

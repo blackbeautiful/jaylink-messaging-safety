@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -10,19 +10,75 @@ import {
   Settings,
   User,
   Users,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { toast } from 'sonner';
 
+// Import centralized API instance and utilities
+import { adminApi, apiUtils } from '@/config/api';
+
 interface AdminLayoutProps {
   children: ReactNode;
+}
+
+interface AdminUser {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
 }
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPath = location.pathname;
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch admin user data on component mount
+  useEffect(() => {
+    const fetchAdminUser = async () => {
+      try {
+        const token = localStorage.getItem('adminToken');
+        
+        if (!token) {
+          // If no admin token, redirect to admin login
+          navigate('/jayadminlink/login', { replace: true });
+          return;
+        }
+        
+        const response = await adminApi.get(apiUtils.endpoints.admin.me);
+        
+        if (response.data.success) {
+          setAdminUser(response.data.data.admin);
+          
+          // Update the stored admin data to ensure it's fresh
+          localStorage.setItem("adminUser", JSON.stringify(response.data.data.admin));
+        } else {
+          // If unsuccessful, redirect to admin login
+          toast.error('Admin session expired. Please login again.');
+          localStorage.removeItem('adminToken');
+          localStorage.removeItem('adminUser');
+          navigate('/jayadminlink/login', { replace: true });
+        }
+      } catch (error) {
+        console.error('Error fetching admin data:', error);
+        const errorMessage = apiUtils.handleError(error, 'Could not verify admin session. Please login again.');
+        toast.error(errorMessage);
+        
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+        navigate('/jayadminlink/login', { replace: true });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchAdminUser();
+  }, [navigate]);
 
   const sidebarLinks = [
     { name: 'Dashboard', icon: <Home size={20} />, path: '/jayadminlink/dashboard' },
@@ -40,9 +96,24 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminUser');
     toast.success('You have been successfully logged out of admin panel.');
-    navigate('/jayadminlink/login');
+    navigate('/jayadminlink/login', { replace: true });
   };
+
+  // Display admin name and email
+  const adminName = adminUser ? `${adminUser.firstName} ${adminUser.lastName}` : 'Admin';
+  const adminEmail = adminUser ? adminUser.email : 'admin@example.com';
+
+  // Show loading while fetching admin data
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-jaylink-600 dark:text-jaylink-400" />
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading admin panel...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -90,8 +161,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
               <User size={20} />
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Admin User</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">admin@example.com</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">{adminName}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{adminEmail}</p>
             </div>
           </div>
           <Button

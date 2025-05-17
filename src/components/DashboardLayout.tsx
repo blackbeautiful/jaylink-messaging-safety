@@ -174,8 +174,6 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
   // Sign out handler
   const handleSignOut = () => {
     logout(); // Call the logout function from AuthContext
-
-    toast.success('You have successfully logged out.');
     // No need to manually remove token or navigate - AuthContext handles this
   };
 

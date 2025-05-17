@@ -63,17 +63,26 @@ const logger = createLogger({
   exitOnError: false,
 });
 
-// Add daily rotation in production
+// Add daily rotation in production only if the winston-daily-rotate-file module is available
 if (config.env === 'production') {
-  const { DailyRotateFile } = require('winston-daily-rotate-file');
-  
-  logger.add(new DailyRotateFile({
-    filename: path.join(logDir, 'application-%DATE%.log'),
-    datePattern: 'YYYY-MM-DD',
-    zippedArchive: true,
-    maxSize: '20m',
-    maxFiles: '14d',
-  }));
+  try {
+    // Import the module safely
+    const DailyRotateFile = require('winston-daily-rotate-file');
+    
+    // Add the daily rotate file transport
+    logger.add(new DailyRotateFile({
+      filename: path.join(logDir, 'application-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      zippedArchive: true,
+      maxSize: '20m',
+      maxFiles: '14d',
+    }));
+    
+    logger.info('Daily log rotation enabled');
+  } catch (error) {
+    logger.warn(`Could not initialize daily log rotation: ${error.message}`);
+    logger.warn('Continuing without daily log rotation');
+  }
 }
 
 // Export as singleton

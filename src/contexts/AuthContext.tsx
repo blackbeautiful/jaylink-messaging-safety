@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { Loader2 } from "lucide-react";
 
@@ -23,6 +23,22 @@ api.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+// Add response interceptor to handle authentication errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // If unauthorized (401) or forbidden (403), clear token and redirect to login
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      // Clear the token from localStorage
+      localStorage.removeItem("token");
+      
+      // We'll let the AuthProvider's useEffect handle the redirect
+      // This avoids navigation outside of React components
+    }
+    return Promise.reject(error);
+  }
 );
 
 // Interface definitions
@@ -50,6 +66,7 @@ interface AuthContextType {
   loading: boolean;
   forgotPassword: (email: string) => Promise<boolean>;
   resetPassword: (token: string, password: string) => Promise<boolean>;
+  checkAuthStatus: () => Promise<boolean>;
 }
 
 interface RegisterData {
@@ -70,43 +87,67 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Compute isAuthenticated and isAdmin based on user state
   const isAuthenticated = !!user;
   const isAdmin = user?.role === "admin";
 
-  // Check if user is authenticated on initial load
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setUser(null);
-          setLoading(false);
-          setInitialized(true);
-          return;
-        }
+  // Check authentication status
+  const checkAuthStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setUser(null);
+        setLoading(false);
+        return false;
+      }
 
-        const response = await api.get("/auth/me");
-        if (response.data.success) {
-          setUser(response.data.data.user);
-        } else {
-          // If unsuccessful, clear token and user
-          localStorage.removeItem("token");
-          setUser(null);
-        }
-      } catch (error) {
-        console.error("Auth validation error:", error);
+      const response = await api.get("/auth/me");
+      if (response.data.success) {
+        setUser(response.data.data.user);
+        return true;
+      } else {
+        // If unsuccessful, clear token and user
         localStorage.removeItem("token");
         setUser(null);
-      } finally {
-        setLoading(false);
-        setInitialized(true);
+        return false;
       }
+    } catch (error) {
+      console.error("Auth validation error:", error);
+      localStorage.removeItem("token");
+      setUser(null);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Check if user is authenticated on initial load and when app focus changes
+  useEffect(() => {
+    const checkAuth = async () => {
+      await checkAuthStatus();
+      setInitialized(true);
     };
 
     checkAuth();
-  }, []);
+
+    // Add event listener for when the page becomes visible again
+    // This helps catch cases where the token might have expired while the app was in the background
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkAuthStatus();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup event listener
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [checkAuthStatus]);
 
   // Login function
   const login = async (email: string, password: string) => {
@@ -118,11 +159,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const { token, user } = response.data.data;
         localStorage.setItem("token", token);
         setUser(user);
-        navigate("/dashboard");
+        
+        // Navigate to the previous page or dashboard
+        const from = location.state?.from || "/dashboard";
+        navigate(from, { replace: true });
         return;
       }
       
-      throw new Error("Login failed");
+      throw new Error(response.data.message || "Login failed");
     } catch (error) {
       console.error("Login error:", error);
       localStorage.removeItem("token");
@@ -139,19 +183,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const response = await api.post("/auth/register", userData);
       
       if (response.data.success) {
-        const { token, user } = response.data.data;
         // Just store the token but don't automatically log in
-        localStorage.setItem("token", token);
-        
-        // Don't set the user here, we want them to log in explicitly
-        // setUser(user);
+        localStorage.setItem("token", response.data.data.token);
         
         // Navigate to login instead of dashboard
-        navigate("/login");
+        navigate("/login", { 
+          state: { message: "Registration successful! Please log in." },
+          replace: true 
+        });
         return;
       }
       
-      throw new Error("Registration failed");
+      throw new Error(response.data.message || "Registration failed");
     } catch (error) {
       console.error("Registration error:", error);
       throw error;
@@ -162,6 +205,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Logout function
   const logout = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem("token");
       if (token) {
@@ -173,6 +217,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Clear token and user state
       localStorage.removeItem("token");
       setUser(null);
+      setLoading(false);
       
       // Force navigation to login page
       navigate("/login", { replace: true });
@@ -214,6 +259,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         loading,
         forgotPassword,
         resetPassword,
+        checkAuthStatus,
       }}
     >
       {initialized ? children :

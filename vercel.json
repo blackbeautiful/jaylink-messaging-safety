@@ -1,11 +1,10 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
-  "routes": [
-    { "src": "/[^.]+", "dest": "/", "status": 200 }
-  ],
-  "github": {
-    "silent": true
-  }
+  "cleanUrls": true,
+  "trailingSlash": false
 }

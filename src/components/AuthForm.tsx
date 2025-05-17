@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -17,7 +17,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Link } from 'react-router-dom';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -68,12 +68,15 @@ type RegisterValues = z.infer<typeof registerSchema>;
 
 type AuthFormProps = {
   type: 'login' | 'register';
+  redirectPath?: string; // Add redirectPath prop
 };
 
-const AuthForm = ({ type }: AuthFormProps) => {
+const AuthForm = ({ type, redirectPath = '/dashboard' }: AuthFormProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, register: registerUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Login form
   const loginForm = useForm<LoginValues>({
@@ -103,64 +106,61 @@ const AuthForm = ({ type }: AuthFormProps) => {
   // Handle login submission
   const onLoginSubmit = async (data: LoginValues) => {
     setIsLoading(true);
+    setError('');
+    
     try {
+      // Pass the rememberMe value as an optional parameter if your login function supports it
       await login(data.email, data.password);
 
-      toast({
-        title: 'Success',
-        description: 'You have successfully logged in.',
-      });
-
-      // If rememberMe is checked, we would handle it here
-      // This is already handled by the JWT expiry for now
+      toast.success('You have successfully logged in.');
+      
+      // No need to navigate here - the AuthContext handles navigation
+      // The login function will navigate to redirectPath
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Login failed',
-        description:
-          error.response?.data?.message || 'Invalid email or password. Please try again.',
-      });
+      setError(error.response?.data?.message || 'Invalid email or password. Please try again.');
+      
+      toast.error(error.response?.data?.message || 'Invalid email or password. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   // Handle register submission
-const onRegisterSubmit = async (data: RegisterValues) => {
-  setIsLoading(true);
-  try {
-    // Extract only the fields we need to send to the API
-    const { confirmPassword, terms, ...rest } = data;
+  const onRegisterSubmit = async (data: RegisterValues) => {
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      // Extract only the fields we need to send to the API
+      const { confirmPassword, terms, ...rest } = data;
 
-    // Create a new object that matches the RegisterData type
-    // making sure firstName, lastName, email, and password are included
-    const registrationData = {
-      firstName: rest.firstName,  // Required field
-      lastName: rest.lastName,    // Required field
-      email: rest.email,          // Required field
-      password: rest.password,    // Required field
-      company: rest.company,      // Optional field
-      phone: rest.phone           // Optional field
-    };
+      // Create a new object that matches the RegisterData type
+      const registrationData = {
+        firstName: rest.firstName,
+        lastName: rest.lastName,
+        email: rest.email,
+        password: rest.password,
+        company: rest.company || undefined,
+        phone: rest.phone || undefined
+      };
 
-    await registerUser(registrationData);
+      await registerUser(registrationData);
 
-    toast({
-      title: 'Success',
-      description: 'Your account has been created successfully.',
-    });
-  } catch (error: any) {
-    toast({
-      variant: 'destructive',
-      title: 'Registration failed',
-      description:
-        error.response?.data?.message ||
-        'There was a problem creating your account. Please try again.',
-    });
-  } finally {
-    setIsLoading(false);
-  }
-};
+      toast.success('Your account has been created successfully.');
+      
+      // Navigate to login with a success message
+      navigate('/login', { 
+        state: { message: 'Registration successful! Please log in.' },
+        replace: true 
+      });
+    } catch (error: any) {
+      setError(error.response?.data?.message || 'There was a problem creating your account. Please try again.');
+      
+      toast.error(error.response?.data?.message || 'There was a problem creating your account. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Login form
   if (type === 'login') {
@@ -169,6 +169,13 @@ const onRegisterSubmit = async (data: RegisterValues) => {
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
           Sign in to your account
         </h2>
+
+        {/* Display error message if any */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 rounded-md text-sm">
+            {error}
+          </div>
+        )}
 
         <Form {...loginForm}>
           <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-6">
@@ -266,6 +273,13 @@ const onRegisterSubmit = async (data: RegisterValues) => {
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Create an account</h2>
+
+      {/* Display error message if any */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 rounded-md text-sm">
+          {error}
+        </div>
+      )}
 
       <Form {...registerForm}>
         <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">

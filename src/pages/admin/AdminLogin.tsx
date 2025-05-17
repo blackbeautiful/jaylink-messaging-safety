@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 const AdminLogin = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -53,6 +54,44 @@ const AdminLogin = () => {
       password: "",
     },
   });
+
+  // Check if already authenticated as admin on component mount
+  useEffect(() => {
+    const checkAdminAuth = async () => {
+      try {
+        const adminToken = localStorage.getItem("adminToken");
+        
+        if (!adminToken) {
+          setIsCheckingAuth(false);
+          return;
+        }
+        
+        // Verify the admin token
+        const response = await axios.get(`${API_URL}/admin/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
+        });
+        
+        if (response.data.success && response.data.data.admin.role === "admin") {
+          // Already authenticated, redirect to admin dashboard
+          navigate(from, { replace: true });
+        } else {
+          // Clear invalid token
+          localStorage.removeItem("adminToken");
+          localStorage.removeItem("adminUser");
+        }
+      } catch (error) {
+        // Clear invalid token
+        localStorage.removeItem("adminToken");
+        localStorage.removeItem("adminUser");
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+    
+    checkAdminAuth();
+  }, [navigate, from]);
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
@@ -68,7 +107,7 @@ const AdminLogin = () => {
         const { token, admin } = response.data.data;
         localStorage.setItem("adminToken", token);
         
-        // Store admin data if needed
+        // Store admin data
         localStorage.setItem("adminUser", JSON.stringify({
           id: admin.id,
           firstName: admin.firstName,
@@ -90,6 +129,16 @@ const AdminLogin = () => {
       setIsLoading(false);
     }
   };
+
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-jaylink-600 dark:text-jaylink-400" />
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Verifying admin status...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4">
@@ -119,6 +168,11 @@ const AdminLogin = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {location.state?.error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 rounded-md text-sm">
+                {location.state.error}
+              </div>
+            )}
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField

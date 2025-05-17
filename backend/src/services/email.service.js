@@ -1,7 +1,16 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 const path = require('path');
-const handlebars = require('handlebars');
+let handlebars;
+try {
+  handlebars = require('handlebars');
+  
+  // Register Handlebars helpers
+  handlebars.registerHelper('currentYear', () => new Date().getFullYear());
+} catch (error) {
+  console.error('Failed to load handlebars:', error.message);
+}
+
 const config = require('../config/config');
 const logger = require('../config/logger');
 
@@ -18,9 +27,6 @@ const createTransporter = () => {
   });
 };
 
-// Register Handlebars helpers
-handlebars.registerHelper('currentYear', () => new Date().getFullYear());
-
 /**
  * Load an email template and compile it with Handlebars
  * @param {string} templateName - The name of the template file (without extension)
@@ -28,9 +34,43 @@ handlebars.registerHelper('currentYear', () => new Date().getFullYear());
  */
 const loadTemplate = async (templateName) => {
   try {
+    if (!handlebars) {
+      throw new Error('Handlebars is not available');
+    }
+    
+    // Try to load from templates directory first
     const filePath = path.join(__dirname, '..', 'templates', 'emails', `${templateName}.hbs`);
-    const templateSource = await fs.readFile(filePath, 'utf-8');
-    return handlebars.compile(templateSource);
+    
+    try {
+      // Check if file exists
+      await fs.access(filePath);
+      const templateSource = await fs.readFile(filePath, 'utf-8');
+      return handlebars.compile(templateSource);
+    } catch (fileError) {
+      // If file doesn't exist, use a simple fallback template
+      logger.warn(`Email template '${templateName}' not found, using fallback template`);
+      
+      // Create a fallback template
+      const fallbackTemplate = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${templateName}</title>
+        </head>
+        <body>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2>{{title}}</h2>
+            <p>Hello {{firstName}},</p>
+            <p>{{message}}</p>
+            <p>Best regards,<br>The JayLink Team</p>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      return handlebars.compile(fallbackTemplate);
+    }
   } catch (error) {
     logger.error(`Failed to load email template '${templateName}': ${error.message}`);
     throw new Error(`Email template '${templateName}' not found or cannot be loaded`);
@@ -92,9 +132,11 @@ const sendWelcomeEmail = async (user) => {
     subject: 'Welcome to JayLink SMS',
     template: 'welcome',
     context: {
+      title: 'Welcome to JayLink SMS',
       firstName: user.firstName,
       lastName: user.lastName,
       appUrl: config.frontendUrl,
+      message: 'Thank you for joining JayLink SMS, your reliable platform for SMS and voice messaging. We\'re excited to have you onboard!'
     },
   });
 };
@@ -113,9 +155,11 @@ const sendPasswordResetEmail = async (user, token) => {
     subject: 'Reset Your JayLink Password',
     template: 'password-reset',
     context: {
+      title: 'Reset Your Password',
       firstName: user.firstName,
       resetUrl,
       expiryTime: '1 hour', // This should match your token expiry
+      message: 'We received a request to reset your password. If you didn\'t make this request, you can safely ignore this email.'
     },
   });
 };
@@ -131,8 +175,11 @@ const sendPasswordChangedEmail = async (user) => {
     subject: 'Your JayLink Password Has Been Changed',
     template: 'password-changed',
     context: {
+      title: 'Password Changed Successfully',
       firstName: user.firstName,
       supportEmail: 'support@jaylink.com',
+      appUrl: config.frontendUrl,
+      message: 'Your password has been successfully changed. If you did not make this change, please contact support immediately.'
     },
   });
 };
@@ -150,10 +197,12 @@ const sendLowBalanceEmail = async (user, balance, threshold) => {
     subject: 'Low Balance Alert - JayLink SMS',
     template: 'low-balance',
     context: {
+      title: 'Low Balance Alert',
       firstName: user.firstName,
       balance: balance.toFixed(2),
       threshold: threshold.toFixed(2),
       topUpUrl: `${config.frontendUrl}/balance`,
+      message: 'Your account balance is below the recommended minimum threshold. Please top up your account to ensure uninterrupted service.'
     },
   });
 };
@@ -170,6 +219,7 @@ const sendDeliveryReportEmail = async (user, message) => {
     subject: 'Message Delivery Report - JayLink SMS',
     template: 'delivery-report',
     context: {
+      title: 'Message Delivery Report',
       firstName: user.firstName,
       messageId: message.messageId,
       recipients: message.recipients,
@@ -177,6 +227,7 @@ const sendDeliveryReportEmail = async (user, message) => {
       failed: message.failed,
       sentTime: message.sentTime,
       reportUrl: `${config.frontendUrl}/analytics`,
+      message: 'Here is the delivery report for your recent message campaign.'
     },
   });
 };

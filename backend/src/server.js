@@ -1,3 +1,4 @@
+// src/server.js
 const app = require('./app');
 const db = require('./models');
 const config = require('./config/config');
@@ -90,22 +91,75 @@ process.on('SIGINT', async () => {
   }
 });
 
-// Start server (improved with graceful shutdown)
+// Start server (improved with graceful shutdown and auto migration)
 const startServer = async () => {
   let server;
   
   try {
-    // Sync database (in development only)
-    if (config.env === 'development') {
-      await db.sequelize.sync();
-      logger.info('Database synchronized successfully');
-      
-      // Initialize database with default data
-      await initializeDatabase();
-    } else {
-      // In production, just authenticate to check connection
+    try {
+      // Check if database exists and tables are created
       await db.sequelize.authenticate();
       logger.info('Database connection established successfully');
+      
+      // Check if tables exist by trying to query the User model
+      try {
+        await db.User.findOne();
+        logger.info('Database tables already exist');
+      } catch (error) {
+        if (error.name === 'SequelizeDatabaseError' && error.parent && error.parent.code === 'ER_NO_SUCH_TABLE') {
+          // Tables don't exist, force sync in all environments
+          logger.info('Tables not found, creating database schema...');
+          await db.sequelize.sync({ force: false });
+          logger.info('Database tables created successfully');
+          
+          // Initialize database with default data after tables are created
+          logger.info('Initializing database with default data...');
+          await initializeDatabase();
+          logger.info('Database initialized successfully');
+        } else {
+          // Some other database issue
+          throw error;
+        }
+      }
+    } catch (error) {
+      logger.error('Database connection error:', error);
+      
+      // For MySQL "ER_BAD_DB_ERROR", try to create the database
+      if (error.name === 'SequelizeConnectionError' && error.parent && error.parent.code === 'ER_BAD_DB_ERROR') {
+        logger.info('Database does not exist, attempting to create it...');
+        
+        // Create a new Sequelize instance without specifying a database
+        const { Sequelize } = require('sequelize');
+        const tempSequelize = new Sequelize({
+          host: config.db.host,
+          port: config.db.port,
+          username: config.db.user,
+          password: config.db.password,
+          dialect: 'mysql',
+          logging: false,
+        });
+        
+        try {
+          // Create the database
+          await tempSequelize.query(`CREATE DATABASE IF NOT EXISTS ${config.db.name};`);
+          await tempSequelize.close();
+          
+          logger.info(`Database ${config.db.name} created successfully`);
+          
+          // Now sync with the newly created database
+          await db.sequelize.sync({ force: false });
+          logger.info('Database tables created successfully');
+          
+          // Initialize database with default data
+          await initializeDatabase();
+          logger.info('Database initialized successfully');
+        } catch (createError) {
+          logger.error('Failed to create database:', createError);
+          throw createError;
+        }
+      } else {
+        throw error; // Re-throw other errors
+      }
     }
 
     // Start Express server

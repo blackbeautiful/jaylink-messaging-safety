@@ -1,3 +1,4 @@
+// src/config/config.js
 require('dotenv').config();
 
 /**
@@ -16,6 +17,8 @@ const config = {
     user: process.env.DB_USER || 'jaylink_user',
     password: process.env.DB_PASSWORD || 'jaylinkdev123',
     name: process.env.DB_NAME || 'jaylink_db',
+    // Handle Railway's database URL format if provided
+    url: process.env.DATABASE_URL || null,
   },
 
   // JWT Authentication configuration
@@ -74,6 +77,9 @@ const config = {
     rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100, // 100 requests per window
     corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:8080',
   },
+
+  // Cors origins (multiple frontend URLs)
+  corsOrigins: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : null,
 
   // Logging configuration
   logging: {

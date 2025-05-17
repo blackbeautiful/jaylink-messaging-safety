@@ -14,12 +14,17 @@ const routes = require('./routes');
 // Initialize Express app
 const app = express();
 
+// Set trust proxy setting for Railway/other PaaS environments
+// This is important for express-rate-limit to work correctly
+// It fixes the "ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false" error
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(helmet());
 
 // CORS setup
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: config.corsOrigins || config.frontendUrl,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -74,6 +79,11 @@ app.get('/health', (req, res) => {
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+    env: config.env,
+    database: {
+      host: config.db.host?.replace(/:[^:]+$/, ':****'), // Hide port for security
+      name: config.db.name,
+    },
   });
 });
 

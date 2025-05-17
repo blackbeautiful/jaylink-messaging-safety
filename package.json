@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "build:dev": "tsc && vite build --mode development",
     "build:production": "tsc && vite build --mode production",
+    "build:vercel": "pnpm install --no-frozen-lockfile && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

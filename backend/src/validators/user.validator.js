@@ -1,3 +1,4 @@
+// src/validators/user.validator.js - Enhanced implementation
 const Joi = require('joi');
 
 // Update profile validation schema
@@ -39,19 +40,44 @@ const changePasswordSchema = Joi.object({
     }),
 });
 
-// Update settings validation schema
+// Update settings validation schema with expanded options
 const updateSettingsSchema = Joi.object({
+  // Main settings object - can contain any of these categories
   theme: Joi.string().valid('light', 'dark', 'system'),
+  
+  // Email notification preferences
+  emailAlerts: Joi.boolean(),
+  lowBalanceAlerts: Joi.boolean(),
+  deliveryReports: Joi.boolean(),
+  marketingEmails: Joi.boolean(),
+
+  // Appearance settings
+  reducedMotion: Joi.boolean(),
+  compactView: Joi.boolean(),
+  highContrast: Joi.boolean(),
+  
+  // Nested settings objects
   notifications: Joi.object({
     email: Joi.boolean(),
     sms: Joi.boolean(),
     app: Joi.boolean(),
+    emailAlerts: Joi.boolean(),
+    lowBalanceAlerts: Joi.boolean(),
+    deliveryReports: Joi.boolean(),
+    marketingEmails: Joi.boolean(),
   }),
+  
   appearance: Joi.object({
+    theme: Joi.string().valid('light', 'dark', 'system'),
     compactView: Joi.boolean(),
     reducedMotion: Joi.boolean(),
     highContrast: Joi.boolean(),
   }),
+  
+  security: Joi.object({
+    twoFactorAuth: Joi.boolean()
+  }),
+  
 }).min(1).messages({
   'object.min': 'At least one setting is required for update',
 });

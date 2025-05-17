@@ -1,6 +1,7 @@
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
 const { Sequelize } = require('sequelize');
+const config = require('../config/config');
 
 /**
  * Error handling middleware
@@ -10,22 +11,37 @@ const { Sequelize } = require('sequelize');
  * @param {Function} next - Express next middleware function
  */
 const errorHandler = (err, req, res, next) => {
+  // Prepare error information
   let statusCode = 500;
   let errorMessage = 'Internal server error';
   let errorDetails = null;
-  let errorCode = 'SERVER_ERROR';
+  let errorCode = err.code || 'SERVER_ERROR';
 
-  // Log error
-  logger.error(`Error: ${err.message}`, {
-    error: err,
-    stack: err.stack,
+  // Collect request context for logging
+  const requestContext = {
     url: req.originalUrl,
     method: req.method,
     ip: req.ip,
-  });
+    userId: req.user?.id,
+    path: req.path,
+    query: req.query,
+  };
+
+  // Add sanitized body data for logging (exclude sensitive fields)
+  if (req.body) {
+    const sanitizedBody = { ...req.body };
+    // Remove sensitive fields
+    ['password', 'newPassword', 'currentPassword', 'token', 'refreshToken'].forEach(field => {
+      if (sanitizedBody[field]) {
+        sanitizedBody[field] = '[REDACTED]';
+      }
+    });
+    requestContext.body = sanitizedBody;
+  }
 
   // Handle different types of errors
   if (err instanceof ApiError) {
+    // Our custom API errors
     statusCode = err.statusCode;
     errorMessage = err.message;
     errorDetails = err.details;
@@ -54,10 +70,32 @@ const errorHandler = (err, req, res, next) => {
     errorMessage = 'Invalid relationship error';
     errorCode = 'FOREIGN_KEY_ERROR';
   } else if (err instanceof Sequelize.DatabaseError) {
-    // Other database errors
+    // Other database errors - Special handling for pagination issue
     statusCode = 500;
-    errorMessage = 'Database error';
     errorCode = 'DATABASE_ERROR';
+    
+    // Specific handling for LIMIT parameter error
+    if (err.parent && err.parent.code === 'ER_PARSE_ERROR' && 
+        err.sql && err.sql.includes('LIMIT') && err.sql.includes('\'')) {
+      statusCode = 400;
+      errorMessage = 'Invalid pagination parameters. Please ensure page and limit are valid numbers.';
+      errorCode = 'INVALID_PAGINATION';
+    } else {
+      // Generic database error (don't expose details in production)
+      errorMessage = config.env === 'development' 
+        ? `Database error: ${err.message}`
+        : 'A database error occurred. Please try again later.';
+      
+      // Log detailed database error info
+      logger.error('Database error details:', {
+        message: err.message,
+        sql: err.sql,
+        params: err.parameters,
+        code: err.parent?.code,
+        errno: err.parent?.errno,
+        ...requestContext
+      });
+    }
   } else if (err.name === 'JsonWebTokenError') {
     // JWT errors
     statusCode = 401;
@@ -70,6 +108,16 @@ const errorHandler = (err, req, res, next) => {
     errorCode = 'TOKEN_EXPIRED';
   }
 
+  // Log error with appropriate level based on status code
+  const logLevel = statusCode >= 500 ? 'error' : 'warn';
+  logger[logLevel](`${err.name || 'Error'}: ${err.message}`, {
+    error: err.message,
+    code: errorCode,
+    statusCode,
+    stack: err.stack,
+    ...requestContext
+  });
+
   // Send error response
   res.status(statusCode).json({
     success: false,
@@ -77,6 +125,8 @@ const errorHandler = (err, req, res, next) => {
     error: {
       code: errorCode,
       details: errorDetails,
+      // Include stack trace only in development environment
+      ...(config.env === 'development' && { stack: err.stack }),
     },
   });
 };

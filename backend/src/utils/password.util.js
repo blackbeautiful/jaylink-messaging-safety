@@ -1,3 +1,4 @@
+// src/utils/password.util.js
 const bcrypt = require('bcrypt');
 const config = require('../config/config');
 

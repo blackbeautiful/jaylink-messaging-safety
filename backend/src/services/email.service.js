@@ -165,6 +165,28 @@ const sendPasswordResetEmail = async (user, token) => {
 };
 
 /**
+ * Send a password reset confirmation email with temporary password
+ * @param {Object} user - User object
+ * @param {string} tempPassword - Temporary password
+ * @returns {Promise<boolean>} Success status
+ */
+const sendPasswordResetConfirmation = async (user, tempPassword) => {
+  return sendTemplateEmail({
+    to: user.email,
+    subject: 'Your JayLink Password Has Been Reset',
+    template: 'password-reset-confirmation',
+    context: {
+      title: 'Password Reset Confirmation',
+      firstName: user.firstName,
+      tempPassword: tempPassword,
+      loginUrl: `${config.frontendUrl}/login`,
+      supportEmail: 'support@jaylink.com',
+      message: 'Your password has been reset by an administrator. Please use the temporary password below to log in, then change your password immediately.'
+    },
+  });
+};
+
+/**
  * Send a password change confirmation email
  * @param {Object} user - User object
  * @returns {Promise<boolean>} Success status
@@ -239,4 +261,5 @@ module.exports = {
   sendPasswordChangedEmail,
   sendLowBalanceEmail,
   sendDeliveryReportEmail,
+  sendPasswordResetConfirmation,
 };

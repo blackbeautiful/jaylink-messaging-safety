@@ -1,22 +1,19 @@
 // src/routes/index.js
 const express = require('express');
-const authRoutes = require('./auth.routes');
-const userRoutes = require('./user.routes');
-const adminRoutes = require('./admin');
-const healthRoutes = require('./health.routes');
-
 const router = express.Router();
 
-// Health check routes
-router.use('/health', healthRoutes);
+// Import routes
+const authRoutes = require('./auth.routes');
+const userRoutes = require('./user.routes');
+const healthRoutes = require('./health.routes');
+const adminRoutes = require('./admin');
+const balanceRoutes = require('./balance.routes');
 
-// Auth routes
+// Mount routes
 router.use('/auth', authRoutes);
-
-// User routes
 router.use('/users', userRoutes);
-
-// Admin routes
+router.use('/health', healthRoutes);
 router.use('/admin', adminRoutes);
+router.use('/balance', balanceRoutes);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-// src/routes/admin/user.routes.js
+// src/routes/admin/user.routes.js - Enhanced implementation
 const express = require('express');
 const adminUserController = require('../../controllers/admin/user.controller');
 const { authenticate, authorizeAdmin } = require('../../middleware/auth.middleware');
@@ -60,6 +60,27 @@ router.put(
 router.delete(
   '/:id',
   adminUserController.deleteUser
+);
+
+/**
+ * @route PUT /api/admin/users/:id/balance
+ * @desc Update user balance
+ * @access Admin
+ */
+router.put(
+  '/:id/balance',
+  validate(adminValidator.updateBalanceSchema),
+  adminUserController.updateUserBalance
+);
+
+/**
+ * @route POST /api/admin/users/:id/reset-password
+ * @desc Reset user password
+ * @access Admin
+ */
+router.post(
+  '/:id/reset-password',
+  adminUserController.resetUserPassword
 );
 
 module.exports = router;

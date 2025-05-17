@@ -1,3 +1,4 @@
+// src/validators/admin.validator.js - Additional schemas
 const Joi = require('joi');
 
 // Create user validation schema
@@ -42,6 +43,7 @@ const createUserSchema = Joi.object({
     .messages({
       'any.only': 'Status must be active, suspended, or inactive'
     }),
+  balance: Joi.number().min(0).default(0)
 });
 
 // Update user validation schema
@@ -76,8 +78,26 @@ const updateUserSchema = Joi.object({
     .messages({
       'any.only': 'Status must be active, suspended, or inactive'
     }),
+  balance: Joi.number().min(0)
 }).min(1).messages({
   'object.min': 'At least one field is required for update',
+});
+
+// Update balance validation schema
+const updateBalanceSchema = Joi.object({
+  operation: Joi.string().valid('add', 'deduct').required()
+    .messages({
+      'string.empty': 'Operation is required',
+      'any.only': 'Operation must be either add or deduct',
+      'any.required': 'Operation is required'
+    }),
+  amount: Joi.number().positive().required()
+    .messages({
+      'number.base': 'Amount must be a number',
+      'number.positive': 'Amount must be a positive number',
+      'any.required': 'Amount is required'
+    }),
+  description: Joi.string().max(255)
 });
 
 // Admin service costs schema
@@ -101,6 +121,7 @@ const dashboardSchema = Joi.object({
 module.exports = {
   createUserSchema,
   updateUserSchema,
+  updateBalanceSchema,
   servicesCostSchema,
   dashboardSchema,
 };

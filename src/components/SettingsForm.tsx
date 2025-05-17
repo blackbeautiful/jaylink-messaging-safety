@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/components/SettingsForm.tsx
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -16,13 +17,15 @@ import {
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import { Moon, Sun, Monitor } from "lucide-react";
 import {
   RadioGroup,
   RadioGroupItem
 } from "@/components/ui/radio-group";
+import { useAuth } from "@/contexts/AuthContext";
+import { api, apiUtils } from "@/config/api";
 
 // Define form schema for profile settings
 const profileFormSchema = z.object({
@@ -44,9 +47,13 @@ const notificationFormSchema = z.object({
 // Define form schema for security settings
 const securityFormSchema = z.object({
   currentPassword: z.string().min(1, { message: "Current password is required" }),
-  newPassword: z.string().min(8, { message: "Password must be at least 8 characters" }),
+  newPassword: z.string().min(8, { message: "Password must be at least 8 characters" })
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{8,}$/, 
+      { message: "Password must include at least one uppercase letter, one lowercase letter, and one number" }),
   confirmPassword: z.string().min(8, { message: "Please confirm your new password" }),
-  twoFactorAuth: z.boolean().default(false),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 // Define form schema for appearance settings
@@ -65,28 +72,89 @@ type AppearanceFormValues = z.infer<typeof appearanceFormSchema>;
 const SettingsForm = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const { theme, setTheme } = useTheme();
-  
-  // Initialize forms with default values
-  const profileForm = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileFormSchema),
-    defaultValues: {
-      firstName: "John",
-      lastName: "Doe",
-      email: "john.doe@example.com",
-      company: "Example Corp",
-      phone: "2348012345678",
-    },
-  });
-  
-  const notificationForm = useForm<NotificationFormValues>({
-    resolver: zodResolver(notificationFormSchema),
-    defaultValues: {
+  const { user, updateProfile } = useAuth();
+  const [userSettings, setUserSettings] = useState<any>({
+    notifications: {
       emailAlerts: true,
       lowBalanceAlerts: true,
       deliveryReports: true,
       marketingEmails: false,
     },
+    appearance: {
+      theme: theme as "light" | "dark" | "system",
+      reducedMotion: false,
+      compactView: false,
+      highContrast: false,
+    }
   });
+  
+  useEffect(() => {
+    // Fetch user settings from API
+    const fetchSettings = async () => {
+      try {
+        const response = await api.get(apiUtils.endpoints.user.settings);
+        if (response.data.success) {
+          setUserSettings(response.data.data.settings);
+        }
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+        toast({
+          variant: "destructive",
+          title: "Failed to load settings",
+          description: "There was a problem loading your settings",
+        });
+      }
+    };
+    
+    fetchSettings();
+  }, []);
+  
+  // Initialize forms with user data and settings
+  const profileForm = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileFormSchema),
+    defaultValues: {
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      email: user?.email || "",
+      company: user?.company || "",
+      phone: user?.phone || "",
+    },
+  });
+
+  // Update profile form when user data changes
+  useEffect(() => {
+    if (user) {
+      profileForm.reset({
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        company: user.company || "",
+        phone: user.phone || "",
+      });
+    }
+  }, [user, profileForm]);
+  
+  const notificationForm = useForm<NotificationFormValues>({
+    resolver: zodResolver(notificationFormSchema),
+    defaultValues: {
+      emailAlerts: userSettings?.notifications?.emailAlerts || true,
+      lowBalanceAlerts: userSettings?.notifications?.lowBalanceAlerts || true,
+      deliveryReports: userSettings?.notifications?.deliveryReports || true,
+      marketingEmails: userSettings?.notifications?.marketingEmails || false,
+    },
+  });
+
+  // Update notification form when settings change
+  useEffect(() => {
+    if (userSettings?.notifications) {
+      notificationForm.reset({
+        emailAlerts: userSettings.notifications.emailAlerts,
+        lowBalanceAlerts: userSettings.notifications.lowBalanceAlerts,
+        deliveryReports: userSettings.notifications.deliveryReports,
+        marketingEmails: userSettings.notifications.marketingEmails,
+      });
+    }
+  }, [userSettings, notificationForm]);
   
   const securityForm = useForm<SecurityFormValues>({
     resolver: zodResolver(securityFormSchema),
@@ -94,35 +162,45 @@ const SettingsForm = () => {
       currentPassword: "",
       newPassword: "",
       confirmPassword: "",
-      twoFactorAuth: false,
     },
   });
   
   const appearanceForm = useForm<AppearanceFormValues>({
     resolver: zodResolver(appearanceFormSchema),
     defaultValues: {
-      theme: theme as "light" | "dark" | "system",
-      reducedMotion: false,
-      compactView: false,
-      highContrast: false,
+      theme: (userSettings?.appearance?.theme || theme) as "light" | "dark" | "system",
+      reducedMotion: userSettings?.appearance?.reducedMotion || false,
+      compactView: userSettings?.appearance?.compactView || false,
+      highContrast: userSettings?.appearance?.highContrast || false,
     },
   });
+
+  // Update appearance form when settings change
+  useEffect(() => {
+    if (userSettings?.appearance) {
+      appearanceForm.reset({
+        theme: userSettings.appearance.theme || theme as "light" | "dark" | "system",
+        reducedMotion: userSettings.appearance.reducedMotion || false,
+        compactView: userSettings.appearance.compactView || false,
+        highContrast: userSettings.appearance.highContrast || false,
+      });
+    }
+  }, [userSettings, appearanceForm, theme]);
   
   // Handle profile form submission
   const onProfileSubmit = async (data: ProfileFormValues) => {
     try {
       setIsUpdating(true);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log("Updating profile:", data);
+      // Update user profile through AuthContext
+      await updateProfile(data);
       
       toast({
         title: "Profile updated",
         description: "Your profile information has been updated successfully",
       });
     } catch (error) {
+      console.error("Update profile error:", error);
       toast({
         variant: "destructive",
         title: "Failed to update profile",
@@ -138,20 +216,30 @@ const SettingsForm = () => {
     try {
       setIsUpdating(true);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log("Updating notification settings:", data);
-      
-      toast({
-        title: "Notification settings updated",
-        description: "Your notification preferences have been saved",
+      // Update notification settings via API
+      const response = await api.put(apiUtils.endpoints.user.settings, {
+        notifications: data
       });
+      
+      if (response.data.success) {
+        setUserSettings(prev => ({
+          ...prev,
+          notifications: data
+        }));
+        
+        toast({
+          title: "Notification settings updated",
+          description: "Your notification preferences have been saved",
+        });
+      } else {
+        throw new Error(response.data.message || "Failed to update settings");
+      }
     } catch (error) {
+      console.error("Update notifications error:", error);
       toast({
         variant: "destructive",
         title: "Failed to update notifications",
-        description: "There was a problem updating your notification settings",
+        description: apiUtils.handleError(error, "There was a problem updating your notification settings"),
       });
     } finally {
       setIsUpdating(false);
@@ -168,30 +256,35 @@ const SettingsForm = () => {
         throw new Error("New password and confirmation do not match");
       }
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log("Updating security settings:", data);
-      
-      toast({
-        title: "Security settings updated",
-        description: data.twoFactorAuth 
-          ? "Your password has been updated and email 2FA has been enabled" 
-          : "Your password has been updated",
+      // Update password via API
+      const response = await api.put(apiUtils.endpoints.user.password, {
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword
       });
       
-      // Reset password fields
-      securityForm.reset({
-        ...data,
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
+      if (response.data.success) {
+        toast({
+          title: "Security settings updated",
+          description: data.currentPassword 
+            ? "Your password has been updated successfully" 
+            : "Your security settings have been updated",
+        });
+        
+        // Reset password fields
+        securityForm.reset({
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+      } else {
+        throw new Error(response.data.message || "Failed to update security settings");
+      }
     } catch (error) {
+      console.error("Security update error:", error);
       toast({
         variant: "destructive",
         title: "Failed to update security settings",
-        description: error instanceof Error ? error.message : "There was a problem updating your security settings",
+        description: apiUtils.handleError(error, "There was a problem updating your security settings"),
       });
     } finally {
       setIsUpdating(false);
@@ -206,20 +299,30 @@ const SettingsForm = () => {
       // Update theme immediately
       setTheme(data.theme);
       
-      // Simulate API call for other settings
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log("Updating appearance settings:", data);
-      
-      toast({
-        title: "Appearance settings updated",
-        description: "Your interface preferences have been saved",
+      // Update appearance settings via API
+      const response = await api.put(apiUtils.endpoints.user.settings, {
+        appearance: data
       });
+      
+      if (response.data.success) {
+        setUserSettings(prev => ({
+          ...prev,
+          appearance: data
+        }));
+        
+        toast({
+          title: "Appearance settings updated",
+          description: "Your interface preferences have been saved",
+        });
+      } else {
+        throw new Error(response.data.message || "Failed to update appearance settings");
+      }
     } catch (error) {
+      console.error("Update appearance error:", error);
       toast({
         variant: "destructive",
         title: "Failed to update appearance settings",
-        description: "There was a problem updating your appearance settings",
+        description: apiUtils.handleError(error, "There was a problem updating your appearance settings"),
       });
     } finally {
       setIsUpdating(false);
@@ -469,7 +572,7 @@ const SettingsForm = () => {
                       <Input {...field} type="password" />
                     </FormControl>
                     <FormDescription>
-                      Password must be at least 8 characters
+                      Password must be at least 8 characters with at least one uppercase letter, one lowercase letter, and one number
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -490,33 +593,12 @@ const SettingsForm = () => {
                 )}
               />
               
-              <FormField
-                control={securityForm.control}
-                name="twoFactorAuth"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Email Two-Factor Authentication</FormLabel>
-                      <FormDescription>
-                        Add an extra layer of security with email verification
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              
               <Button 
                 type="submit" 
                 className="bg-jaylink-600 hover:bg-jaylink-700"
                 disabled={isUpdating}
               >
-                {isUpdating ? "Updating..." : "Update Security Settings"}
+                {isUpdating ? "Updating..." : "Update Password"}
               </Button>
             </form>
           </Form>

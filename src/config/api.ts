@@ -1,11 +1,11 @@
 // src/config/api.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import axios, { 
-  AxiosInstance, 
-  AxiosRequestConfig, 
-  AxiosResponse, 
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
   AxiosError,
-  InternalAxiosRequestConfig 
+  InternalAxiosRequestConfig,
 } from 'axios';
 import { toast } from 'sonner';
 
@@ -64,23 +64,28 @@ const createApiInstance = (
       (error: AxiosError) => {
         // Extract response data
         const response = error.response;
-        
+
         // Handle authentication errors (401/403)
         if (response?.status === 401 || response?.status === 403) {
           localStorage.removeItem(tokenName);
-          
+
           // Only show toast if it's not a login endpoint
           const isLoginEndpoint = error.config?.url?.includes('/login');
           if (!isLoginEndpoint) {
             toast.error('Your session has expired. Please log in again.');
+
+            // Redirect to login page after a short delay
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 1500);
           }
         }
-        
+
         // Handle server errors
         if (response?.status && response.status >= 500) {
           toast.error('Server error. Please try again later.');
         }
-        
+
         return Promise.reject(error);
       }
     );
@@ -101,18 +106,31 @@ export const apiUtils = {
   handleError: (error: any, defaultMessage: string = 'An error occurred'): string => {
     if (axios.isAxiosError(error)) {
       const response = error.response;
-      return response?.data?.message || error.message || defaultMessage;
+      // Check if the response has a data object with message or errors
+      if (response?.data) {
+        if (response.data.message) {
+          return response.data.message;
+        }
+        if (response.data.error?.details) {
+          // Join validation error messages if available
+          if (Array.isArray(response.data.error.details)) {
+            return response.data.error.details.map((detail: any) => detail.message).join(', ');
+          }
+          return response.data.error.details;
+        }
+      }
+      return error.message || defaultMessage;
     }
-    return defaultMessage;
+    return error?.message || defaultMessage;
   },
-  
+
   /**
    * Extract response data with type safety
    */
   extractData: <T>(response: AxiosResponse): T => {
     return response.data.data;
   },
-  
+
   /**
    * Create API endpoints
    */
@@ -136,14 +154,17 @@ export const apiUtils = {
       settings: '/admin/settings',
     },
     user: {
-      sms: '/user/sms',
-      voice: '/user/voice',
-      balance: '/user/balance',
-      groups: '/user/groups',
-      scheduled: '/user/scheduled',
-      settings: '/user/settings',
-      analytics: '/user/analytics',
-      topup: '/user/topup',
+      profile: '/users/profile',
+      password: '/users/password',
+      settings: '/users/settings',
+      profileSettings: '/users/profile-settings',
+      sms: '/sms',
+      voice: '/voice',
+      balance: '/balance',
+      groups: '/groups',
+      scheduled: '/scheduled',
+      analytics: '/analytics',
+      topup: '/balance/topup',
     },
   },
 };

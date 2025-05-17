@@ -1,4 +1,4 @@
-// src/routes/user.routes.js
+// src/routes/user.routes.js - Enhanced implementation
 const express = require('express');
 const userController = require('../controllers/user.controller');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -16,6 +16,17 @@ router.get(
   '/profile',
   authenticate,
   userController.getProfile
+);
+
+/**
+ * @route GET /api/users/profile-settings
+ * @desc Get user profile with settings
+ * @access Private
+ */
+router.get(
+  '/profile-settings',
+  authenticate,
+  userController.getProfileWithSettings
 );
 
 /**
@@ -40,6 +51,17 @@ router.put(
   authenticate,
   validate(userValidator.changePasswordSchema),
   userController.changePassword
+);
+
+/**
+ * @route GET /api/users/settings
+ * @desc Get user settings
+ * @access Private
+ */
+router.get(
+  '/settings',
+  authenticate,
+  userController.getSettings
 );
 
 /**

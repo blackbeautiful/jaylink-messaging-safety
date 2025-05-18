@@ -1,4 +1,3 @@
-// src/routes/index.js
 const express = require('express');
 const router = express.Router();
 const { rateLimit } = require('express-rate-limit');
@@ -10,11 +9,13 @@ const userRoutes = require('./user.routes');
 const healthRoutes = require('./health.routes');
 const adminRoutes = require('./admin');
 const balanceRoutes = require('./balance.routes');
+const contactRoutes = require('./contact.routes');
+const groupRoutes = require('./group.routes');
 
 // Rate limiters
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
+  max: 50, // Allow up to 50 requests per window
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -27,12 +28,15 @@ const authLimiter = rateLimit({
   },
 });
 
+
 // Mount routes with appropriate rate limiters
 router.use('/auth', authLimiter, authRoutes);
 router.use('/users', userRoutes);
 router.use('/health', healthRoutes);
 router.use('/admin', adminRoutes);
 router.use('/balance', balanceRoutes);
+router.use('/contacts', contactRoutes);
+router.use('/groups', groupRoutes);
 
 // API information route
 router.get('/', (req, res) => {

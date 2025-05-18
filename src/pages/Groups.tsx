@@ -12,9 +12,9 @@ import { useLocation } from "react-router-dom";
 
 // Mock data for the lists
 const mockGroups = [
-  { id: "1", name: "Customers", description: "Regular customers", count: 125, date: "2023-05-10" },
-  { id: "2", name: "Employees", description: "Company staff", count: 42, date: "2023-05-15" },
-  { id: "3", name: "Vendors", description: "Service providers", count: 18, date: "2023-05-20" },
+  { id: "1", name: "Customers", description: "Regular customers", contactCount: 125, createdAt: "2023-05-10" },
+  { id: "2", name: "Employees", description: "Company staff", contactCount: 42, createdAt: "2023-05-15" },
+  { id: "3", name: "Vendors", description: "Service providers", contactCount: 18, createdAt: "2023-05-20" },
 ];
 
 const mockContacts = [
@@ -56,8 +56,8 @@ const Groups = () => {
       id: `group-${Date.now()}`,
       name,
       description,
-      count: 0,
-      date: new Date().toISOString().split('T')[0],
+      contactCount: 0,
+      createdAt: new Date().toISOString().split('T')[0],
     };
     
     setGroups([newGroup, ...groups]);

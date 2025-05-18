@@ -1,9 +1,21 @@
-
 import { Button } from "@/components/ui/button";
 import { Edit, Trash2, User } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
 interface Contact {
-  id: string;
+  id: string | number;
   name: string;
   phone: string;
   email?: string;
@@ -11,10 +23,48 @@ interface Contact {
 
 export interface ContactListProps {
   contacts: Contact[];
-  onDeleteContact: (id: string) => void;
+  onDeleteContact: (id: string | number) => void;
+  isLoading?: boolean;
 }
 
-const ContactList = ({ contacts, onDeleteContact }: ContactListProps) => {
+const ContactList = ({ contacts, onDeleteContact, isLoading = false }: ContactListProps) => {
+  const [contactToDelete, setContactToDelete] = useState<string | number | null>(null);
+
+  const confirmDelete = (id: string | number) => {
+    setContactToDelete(id);
+  };
+
+  const handleDeleteConfirmed = () => {
+    if (contactToDelete !== null) {
+      onDeleteContact(contactToDelete);
+      setContactToDelete(null);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="bg-gray-50 dark:bg-gray-700/40 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Skeleton className="w-9 h-9 rounded-full mr-3" />
+                <div>
+                  <Skeleton className="h-5 w-32 mb-1" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+              </div>
+              <div className="flex space-x-1">
+                <Skeleton className="h-8 w-8 rounded-md" />
+                <Skeleton className="h-8 w-8 rounded-md" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {contacts.length === 0 ? (
@@ -44,13 +94,31 @@ const ContactList = ({ contacts, onDeleteContact }: ContactListProps) => {
               <Button variant="ghost" size="icon">
                 <Edit className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDeleteContact(contact.id)}
-              >
-                <Trash2 className="h-4 w-4 text-red-500" />
-              </Button>
+              <AlertDialog open={contactToDelete === contact.id}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => confirmDelete(contact.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete the contact "{contact.name}". This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setContactToDelete(null)}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteConfirmed} className="bg-red-500 hover:bg-red-600">
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         ))

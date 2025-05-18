@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,23 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ContactSelector, { Contact } from "./contacts/ContactSelector";
 import GroupSelector, { Group } from "./groups/GroupSelector";
-import { smsApiService } from "@/utils/apiService";
-
-// Mock data for development
-const mockContacts = [
-  { id: "1", name: "John Smith", phone: "+1 (555) 123-4567", email: "john.smith@example.com" },
-  { id: "2", name: "Sarah Johnson", phone: "+1 (555) 987-6543", email: "sarah.j@example.com" },
-  { id: "3", name: "Michael Brown", phone: "+1 (555) 456-7890", email: "michael.b@example.com" },
-  { id: "4", name: "Emma Wilson", phone: "+1 (555) 789-0123", email: "emma.w@example.com" },
-  { id: "5", name: "David Lee", phone: "+1 (555) 234-5678", email: "david.lee@example.com" },
-];
-
-const mockGroups = [
-  { id: "1", name: "Customers", description: "All paying customers", members: 128 },
-  { id: "2", name: "Employees", description: "Internal staff members", members: 42 },
-  { id: "3", name: "Subscribers", description: "Newsletter subscribers", members: 2156 },
-  { id: "4", name: "VIP Clients", description: "Premium customers", members: 17 },
-];
+import { api } from "@/contexts/AuthContext";
 
 const MessageForm = () => {
   const [loading, setLoading] = useState(false);
@@ -64,6 +48,7 @@ const MessageForm = () => {
   // Selected contacts/groups state
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
   
   const [formData, setFormData] = useState({
     recipientType: "direct", // "direct", "contacts", "group"
@@ -73,6 +58,29 @@ const MessageForm = () => {
     csvFile: null as File | null,
     recipientCount: 0,
   });
+  
+  // Fetch groups on component mount
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const response = await api.get('/groups');
+        if (response.data.success) {
+          // Transform the groups to match the expected format
+          const formattedGroups = response.data.data.groups.map((group: any) => ({
+            id: group.id,
+            name: group.name,
+            description: group.description || "",
+            members: group.contactCount
+          }));
+          setGroups(formattedGroups);
+        }
+      } catch (error) {
+        console.error('Error fetching groups:', error);
+      }
+    };
+    
+    fetchGroups();
+  }, []);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -115,7 +123,7 @@ const MessageForm = () => {
     setFormData({
       ...formData,
       recipientType: "group",
-      recipients: `Group: ${group.name}`,
+      recipients: `group_${group.id}`,
       recipientCount: group.members,
     });
     setOpenGroupsDialog(false);
@@ -131,23 +139,13 @@ const MessageForm = () => {
         return;
       }
       
-      // Read file to count recipients
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target && event.target.result) {
-          const content = event.target.result as string;
-          const lines = content.split('\n').filter(line => line.trim());
-          
-          setFormData({
-            ...formData,
-            csvFile: file,
-            recipientCount: lines.length
-          });
-          
-          toast.success(`CSV file loaded with ${lines.length} recipient(s)`);
-        }
-      };
-      reader.readAsText(file);
+      setFormData({
+        ...formData,
+        csvFile: file,
+        recipientCount: 0 // We don't know how many recipients until we process the file
+      });
+      
+      toast.success(`CSV file loaded: ${file.name}`);
     }
   };
 
@@ -175,57 +173,95 @@ const MessageForm = () => {
         return;
       }
 
-      // Prepare recipients based on the type and mode
-      let recipients;
-      
       if (bulkMode) {
-        // In bulk mode, we'll use the CSV file
-        // In a real implementation, we'd process the CSV here or send it to the API
-        recipients = `csv_${formData.recipientCount}_recipients`;
-      } else if (formData.recipientType === "direct") {
-        recipients = formData.recipients;
-      } else if (formData.recipientType === "contacts") {
-        recipients = selectedContacts.map(c => c.phone).join(",");
-      } else if (formData.recipientType === "group" && selectedGroup) {
-        // In a real app, you would fetch all contacts in this group
-        recipients = `group_${selectedGroup.id}`;
+        // Handle bulk SMS with CSV file
+        const formDataObj = new FormData();
+        formDataObj.append('message', formData.message);
+        
+        if (formData.senderId) {
+          formDataObj.append('senderId', formData.senderId);
+        }
+        
+        if (scheduledMessage && scheduledDate) {
+          formDataObj.append('scheduled', scheduledDate);
+        }
+        
+        if (formData.csvFile) {
+          formDataObj.append('file', formData.csvFile);
+        }
+        
+        const response = await api.post('/sms/bulk-send', formDataObj, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        if (response.data.success) {
+          const result = response.data.data;
+          
+          if (result.status === 'scheduled') {
+            toast.success(`Message scheduled for ${new Date(result.scheduledAt).toLocaleString()}`);
+          } else {
+            toast.success(`Message sent to ${result.recipients} recipient(s)`);
+          }
+          
+          // Reset form
+          resetForm();
+        } else {
+          toast.error(response.data.message || 'Failed to send message');
+        }
+      } else {
+        // Handle regular SMS
+        const payload = {
+          recipients: formData.recipients,
+          message: formData.message,
+          senderId: formData.senderId || undefined,
+          scheduled: scheduledMessage ? scheduledDate : undefined
+        };
+        
+        const response = await api.post('/sms/send', payload);
+        
+        if (response.data.success) {
+          const result = response.data.data;
+          
+          if (result.status === 'scheduled') {
+            toast.success(`Message scheduled for ${new Date(result.scheduledAt).toLocaleString()}`);
+          } else {
+            toast.success(`Message sent to ${result.recipients} recipient(s)`);
+          }
+          
+          // Reset form
+          resetForm();
+        } else {
+          toast.error(response.data.message || 'Failed to send message');
+        }
       }
-
-      // Call the API with proper arguments
-      await smsApiService.sendSMS({
-        recipients,
-        message: formData.message,
-        senderId: formData.senderId,
-        scheduled: scheduledMessage ? scheduledDate : undefined
-      });
-
-      toast.success(
-        scheduledMessage
-          ? `Message ${bulkMode ? 'bulk ' : ''}scheduled to ${formData.recipientCount || '1+'} recipient(s)`
-          : `Message ${bulkMode ? 'bulk ' : ''}sent to ${formData.recipientCount || '1+'} recipient(s)`
-      );
-      
-      // Reset form
-      setFormData({
-        recipientType: "direct",
-        recipients: "",
-        message: "",
-        senderId: "",
-        csvFile: null,
-        recipientCount: 0,
-      });
-      
-      if (csvInputRef.current) csvInputRef.current.value = '';
-      setSelectedContacts([]);
-      setSelectedGroup(null);
-      setScheduledMessage(false);
-      setScheduledDate("");
-    } catch (error) {
-      toast.error("Failed to send message");
+    } catch (error: any) {
       console.error("Error sending message:", error);
+      toast.error(error.response?.data?.message || "Failed to send message");
     } finally {
       setLoading(false);
     }
+  };
+  
+  const resetForm = () => {
+    setFormData({
+      recipientType: "direct",
+      recipients: "",
+      message: "",
+      senderId: "",
+      csvFile: null,
+      recipientCount: 0,
+    });
+    
+    if (csvInputRef.current) {
+      csvInputRef.current.value = '';
+    }
+    
+    setSelectedContacts([]);
+    setSelectedGroup(null);
+    setScheduledMessage(false);
+    setScheduledDate("");
   };
 
   return (
@@ -290,9 +326,6 @@ const MessageForm = () => {
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       File: {formData.csvFile.name}
                     </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Recipients: {formData.recipientCount}
-                    </p>
                   </div>
                 )}
               </CardContent>
@@ -355,27 +388,12 @@ const MessageForm = () => {
               {formData.recipientType === "contacts" && (
                 <div className="space-y-2">
                   <Label>Select Contacts</Label>
-                  <Dialog open={openContactsDialog} onOpenChange={setOpenContactsDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full flex justify-between items-center">
-                        <span>{selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}</span>
-                        <UsersRound className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>Select Contacts</DialogTitle>
-                        <DialogDescription>
-                          Choose contacts to send your message to
-                        </DialogDescription>
-                      </DialogHeader>
-                      <ContactSelector 
-                        contacts={mockContacts} 
-                        onContactsSelected={handleContactsSelected}
-                        buttonText="Confirm Selection"
-                      />
-                    </DialogContent>
-                  </Dialog>
+                  <ContactSelector 
+                    onContactsSelected={handleContactsSelected}
+                    buttonText={selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}
+                    preSelectedContacts={selectedContacts}
+                    showCount={false}
+                  />
                   
                   {selectedContacts.length > 0 && (
                     <div className="text-sm text-muted-foreground">
@@ -388,27 +406,11 @@ const MessageForm = () => {
               {formData.recipientType === "group" && (
                 <div className="space-y-2">
                   <Label>Select Group</Label>
-                  <Dialog open={openGroupsDialog} onOpenChange={setOpenGroupsDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full flex justify-between items-center">
-                        <span>{selectedGroup ? selectedGroup.name : "Select Group"}</span>
-                        <UsersRound className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>Select Group</DialogTitle>
-                        <DialogDescription>
-                          Choose a contact group for bulk messaging
-                        </DialogDescription>
-                      </DialogHeader>
-                      <GroupSelector 
-                        groups={mockGroups} 
-                        onGroupSelected={handleGroupSelected}
-                        buttonText="Select Group"
-                      />
-                    </DialogContent>
-                  </Dialog>
+                  <GroupSelector 
+                    groups={groups} 
+                    onGroupSelected={handleGroupSelected}
+                    buttonText={selectedGroup ? selectedGroup.name : "Select Group"}
+                  />
                   
                   {selectedGroup && (
                     <div className="text-sm text-muted-foreground">

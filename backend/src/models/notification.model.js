@@ -1,4 +1,4 @@
-// src/models/notification.model.js
+// backend/src/models/notification.model.js
 module.exports = (sequelize, DataTypes) => {
     const Notification = sequelize.define('Notification', {
       id: {

@@ -1,4 +1,4 @@
-// src/controllers/balance.controller.js
+// backend/src/controllers/balance.controller.js
 const balanceService = require('../services/balance.service');
 const response = require('../utils/response.util');
 const logger = require('../config/logger');

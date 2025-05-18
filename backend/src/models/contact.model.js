@@ -1,3 +1,4 @@
+// backend/src/models/contact.model.js
 /**
  * Contact model
  * @param {Object} sequelize - Sequelize instance

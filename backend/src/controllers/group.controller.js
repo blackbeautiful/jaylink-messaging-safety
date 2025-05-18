@@ -1,3 +1,4 @@
+// backend/src/controllers/group.controller.js
 const groupService = require('../services/group.service');
 const response = require('../utils/response.util');
 const logger = require('../config/logger');

@@ -1,4 +1,3 @@
-
 import { motion } from "framer-motion";
 import { 
   MessageSquare, 
@@ -6,7 +5,8 @@ import {
   BarChart3, 
   Wallet, 
   ChevronUp, 
-  ChevronDown 
+  ChevronDown,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,33 +68,56 @@ const StatCard = ({ title, value, icon, change, delay = 0 }: StatCardProps) => {
   );
 };
 
-const DashboardStats = () => {
+interface DashboardStatsProps {
+  analytics: any;
+  loading: boolean;
+}
+
+const DashboardStats = ({ analytics, loading }: DashboardStatsProps) => {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[1, 2, 3, 4].map((i) => (
+          <div 
+            key={i}
+            className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-subtle flex items-center justify-center h-32"
+          >
+            <Loader2 className="h-8 w-8 animate-spin text-jaylink-600/30" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  
+  // Default values in case analytics isn't loaded yet
+  const totalMessages = analytics?.totalCount || 0;
+  const deliveryRate = analytics?.deliveryRate || 0;
+  const voiceCallCount = analytics?.types?.voice || 0;
+  const balance = 0; // This would come from a different API call
+  
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <StatCard
         title="Total Messages"
-        value="4,328"
+        value={totalMessages.toString()}
         icon={<MessageSquare size={20} />}
-        change={12.5}
         delay={0}
       />
       <StatCard
         title="Voice Calls"
-        value="842"
+        value={voiceCallCount.toString()}
         icon={<Phone size={20} />}
-        change={-3.8}
         delay={1}
       />
       <StatCard
         title="Delivery Rate"
-        value="98.7%"
+        value={`${deliveryRate}%`}
         icon={<BarChart3 size={20} />}
-        change={2.1}
         delay={2}
       />
       <StatCard
         title="Balance"
-        value="₦24,150"
+        value={`$${balance.toFixed(2)}`}
         icon={<Wallet size={20} />}
         delay={3}
       />

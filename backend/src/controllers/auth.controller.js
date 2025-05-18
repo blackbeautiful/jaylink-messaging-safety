@@ -1,3 +1,4 @@
+// backend/src/controllers/auth.controller.js
 const authService = require('../services/auth.service');
 const response = require('../utils/response.util');
 const logger = require('../config/logger');

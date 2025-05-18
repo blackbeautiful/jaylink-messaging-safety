@@ -1,3 +1,4 @@
+// backend/src/models/group-contact.model.js
 /**
  * Group-Contact junction model
  * @param {Object} sequelize - Sequelize instance

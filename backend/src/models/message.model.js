@@ -1,3 +1,4 @@
+// backend/src/models/message.model.js
 /**
  * Message model
  * @param {Object} sequelize - Sequelize instance

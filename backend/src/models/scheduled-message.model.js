@@ -1,3 +1,4 @@
+// backend/src/models/scheduled-message.model.js
 /**
  * Scheduled Message model
  * @param {Object} sequelize - Sequelize instance

@@ -1,10 +1,10 @@
-// src/services/balance.service.js - Complete backend implementation
 const { Op } = require('sequelize');
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
 const logger = require('../config/logger');
 const notificationService = require('./notification.service');
 const emailService = require('./email.service');
+const { generateUniqueId } = require('../utils/id.util');
 
 const User = db.User;
 const Transaction = db.Transaction;
@@ -12,6 +12,28 @@ const SystemSetting = db.SystemSetting;
 
 /**
  * Get user balance
+ * @param {number} userId - User ID
+ * @returns {number} User balance amount
+ */
+const getUserBalance = async (userId) => {
+  try {
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'balance'],
+    });
+
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+
+    return parseFloat(user.balance);
+  } catch (error) {
+    logger.error(`Get user balance error: ${error.message}`, { stack: error.stack, userId });
+    throw error;
+  }
+};
+
+/**
+ * Get user balance with additional info
  * @param {number} userId - User ID
  * @returns {Object} User balance info
  */
@@ -31,7 +53,7 @@ const getBalance = async (userId) => {
       lastUpdated: new Date(),
     };
   } catch (error) {
-    logger.error(`Get balance service error: ${error.message}`);
+    logger.error(`Get balance service error: ${error.message}`, { stack: error.stack, userId });
     throw error;
   }
 };
@@ -42,9 +64,9 @@ const getBalance = async (userId) => {
  * @param {Object} options - Query options
  * @returns {Object} Transactions with pagination
  */
-const getTransactions = async (userId, options) => {
+const getTransactions = async (userId, options = {}) => {
   try {
-    const { type, page = 1, limit = 20, startDate, endDate } = options;
+    const { type, page = 1, limit = 20, startDate = null, endDate = null } = options;
     const offset = (page - 1) * limit;
     
     // Build where clause
@@ -81,12 +103,17 @@ const getTransactions = async (userId, options) => {
     
     return {
       transactions: rows,
-      total: count,
-      page: parseInt(page, 10),
-      pages: totalPages,
+      pagination: {
+        total: count,
+        totalPages,
+        currentPage: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     };
   } catch (error) {
-    logger.error(`Get transactions service error: ${error.message}`);
+    logger.error(`Get transactions service error: ${error.message}`, { stack: error.stack, userId, options });
     throw error;
   }
 };
@@ -120,9 +147,10 @@ const addBalance = async (userId, amount, paymentMethod) => {
       await user.update({ balance: newBalance }, { transaction: t });
       
       // Create transaction record
+      const transactionId = generateUniqueId('top');
       const transaction = await Transaction.create({
         userId,
-        transactionId: `TOP-${Date.now()}`,
+        transactionId,
         type: 'credit',
         amount: parseFloat(amount),
         balanceAfter: newBalance,
@@ -154,7 +182,7 @@ const addBalance = async (userId, amount, paymentMethod) => {
       throw error;
     }
   } catch (error) {
-    logger.error(`Add balance service error: ${error.message}`);
+    logger.error(`Add balance service error: ${error.message}`, { stack: error.stack, userId, amount, paymentMethod });
     throw error;
   }
 };
@@ -194,9 +222,10 @@ const deductBalance = async (userId, amount, service, description) => {
       await user.update({ balance: newBalance }, { transaction: t });
       
       // Create transaction record
+      const transactionId = generateUniqueId(service);
       const transaction = await Transaction.create({
         userId,
-        transactionId: `SRV-${Date.now()}`,
+        transactionId,
         type: 'debit',
         amount: parseFloat(amount),
         balanceAfter: newBalance,
@@ -225,7 +254,7 @@ const deductBalance = async (userId, amount, service, description) => {
       throw error;
     }
   } catch (error) {
-    logger.error(`Deduct balance service error: ${error.message}`);
+    logger.error(`Deduct balance service error: ${error.message}`, { stack: error.stack, userId, amount, service });
     throw error;
   }
 };
@@ -315,7 +344,7 @@ const processPayment = async (userId, paymentId, amount, status) => {
       throw error;
     }
   } catch (error) {
-    logger.error(`Process payment service error: ${error.message}`);
+    logger.error(`Process payment service error: ${error.message}`, { stack: error.stack, userId, paymentId });
     throw error;
   }
 };
@@ -373,7 +402,7 @@ const checkLowBalance = async (userId, balance) => {
       ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
     }
   } catch (error) {
-    logger.error(`Check low balance error: ${error.message}`);
+    logger.error(`Check low balance error: ${error.message}`, { stack: error.stack, userId, balance });
     // Don't throw the error as this is a background operation
   }
 };
@@ -428,12 +457,13 @@ const getBalanceSummary = async (userId) => {
       lastUpdated: new Date(),
     };
   } catch (error) {
-    logger.error(`Get balance summary service error: ${error.message}`);
+    logger.error(`Get balance summary service error: ${error.message}`, { stack: error.stack, userId });
     throw error;
   }
 };
 
 module.exports = {
+  getUserBalance,
   getBalance,
   getTransactions,
   addBalance,

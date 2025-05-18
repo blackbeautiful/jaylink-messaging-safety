@@ -1,4 +1,4 @@
-// src/controllers/user.controller.js - Enhanced implementation with better error handling
+// backend/src/controllers/user.controller.js - Enhanced implementation with better error handling
 const userService = require('../services/user.service');
 const authService = require('../services/auth.service');
 const response = require('../utils/response.util');

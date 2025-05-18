@@ -1,3 +1,4 @@
+// backend/src/models/group.model.js
 /**
  * Group model
  * @param {Object} sequelize - Sequelize instance

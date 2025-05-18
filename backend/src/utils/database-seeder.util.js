@@ -1,12 +1,7 @@
-// backend/src/utils/database-seeder.util.js
 const bcrypt = require('bcrypt');
 const db = require('../models');
 const config = require('../config/config');
 const logger = require('../config/logger');
-
-const User = db.User;
-const ServiceCost = db.ServiceCost;
-const SystemSetting = db.SystemSetting;
 
 /**
  * Initialize database with default data
@@ -44,7 +39,7 @@ const initializeDatabase = async () => {
     }
 
     // Initialize service costs if they don't exist
-    const servicesCostCount = await ServiceCost.count();
+    const serviceCostsCount = await db.ServiceCost.count(); // Fixed variable name
 
     if (serviceCostsCount === 0) {
       logger.info('Initializing default service costs...');
@@ -87,33 +82,50 @@ const initializeDatabase = async () => {
         },
       ];
 
-      await ServiceCost.bulkCreate(defaultServiceCosts);
+      await db.ServiceCost.bulkCreate(defaultServiceCosts);
       logger.info('Default service costs initialized successfully');
     } else {
       logger.info('Service costs already exist, skipping creation');
     }
 
     // Initialize system settings if they don't exist
-    const systemSettings = await db.Setting.findOne({
-      where: { userId: null, category: 'system' }
-    });
+    const systemSettingsCount = await db.SystemSetting.count();
 
-    if (!systemSettings) {
+    if (systemSettingsCount === 0) {
       logger.info('Initializing system settings...');
       
-      await db.Setting.create({
-        userId: null,
-        category: 'system',
-        settings: {
-          minimumBalanceThreshold: 10.00,
-          defaultMessageExpiry: 7, // days
-          maximumRecipientsPerBatch: 1000,
-          csvImportLimit: 5000,
-          maintenanceMode: false,
+      const defaultSystemSettings = [
+        {
+          settingKey: 'minimumBalanceThreshold',
+          settingValue: '10.00',
+          description: 'Minimum balance threshold for alerts',
         },
-      });
+        {
+          settingKey: 'defaultMessageExpiry',
+          settingValue: '7',
+          description: 'Default message expiry in days',
+        },
+        {
+          settingKey: 'maximumRecipientsPerBatch',
+          settingValue: '1000',
+          description: 'Maximum recipients per batch',
+        },
+        {
+          settingKey: 'csvImportLimit',
+          settingValue: '5000',
+          description: 'Maximum contacts per CSV import',
+        },
+        {
+          settingKey: 'maintenanceMode',
+          settingValue: 'false',
+          description: 'System maintenance mode',
+        },
+      ];
       
+      await db.SystemSetting.bulkCreate(defaultSystemSettings);
       logger.info('System settings initialized successfully');
+    } else {
+      logger.info('System settings already exist, skipping creation');
     }
 
     // Create demo user for testing if it doesn't exist
@@ -126,7 +138,7 @@ const initializeDatabase = async () => {
       
       // Hash password
       const salt = await bcrypt.genSalt(parseInt(config.auth.saltRounds, 10));
-      const hashedPassword = await bcrypt.hash('demo123', salt);
+      const hashedPassword = await bcrypt.hash('@Demo123', salt);
       
       // Create demo user
       const demoUser = await db.User.create({
@@ -138,7 +150,7 @@ const initializeDatabase = async () => {
         phone: '+1234567890',
         role: 'user',
         status: 'active',
-        balance: 50.00, // Initial balance for testing
+        balance: 80.00, // Initial balance for testing
       });
       
       // Create demo contacts for testing

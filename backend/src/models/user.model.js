@@ -1,3 +1,4 @@
+// backend/src/models/user.model.js
 /**
  * User model
  * @param {Object} sequelize - Sequelize instance

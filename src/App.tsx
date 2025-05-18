@@ -25,6 +25,7 @@ import Balance from "./pages/Balance";
 import Support from "./pages/Support";
 import Groups from "./pages/Groups";
 import Scheduled from "./pages/Scheduled";
+import MessageHistory from "./pages/MessageHistory";
 import PaymentPage from "./pages/PaymentPage";
 import Settings from "./pages/Settings";
 import UploadAudio from "./pages/UploadAudio";
@@ -80,6 +81,7 @@ const AppRoutes = () => {
           <Route path="/support" element={<Support />} />
           <Route path="/groups" element={<Groups />} />
           <Route path="/scheduled" element={<Scheduled />} />
+          <Route path="/sms/history" element={<MessageHistory />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/payment" element={<PaymentPage />} />
           <Route path="/upload-audio" element={<UploadAudio />} />

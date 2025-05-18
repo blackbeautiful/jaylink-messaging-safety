@@ -1,3 +1,4 @@
+// backend/src/models/user-session.model.js
 /**
  * UserSession model
  * @param {Object} sequelize - Sequelize instance

@@ -1,3 +1,4 @@
+// backend/src/models/setting.model.js
 /**
  * Setting model
  * @param {Object} sequelize - Sequelize instance

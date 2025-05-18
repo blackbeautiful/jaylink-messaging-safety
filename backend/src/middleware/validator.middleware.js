@@ -1,3 +1,4 @@
+// src/middleware/validator.middleware.js
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
 
@@ -15,16 +16,27 @@ const validate = (schema, source = 'body') => {
         return next();
       }
 
+      // Validate source type
+      if (!['body', 'query', 'params', 'headers'].includes(source)) {
+        logger.error(`Invalid validation source: ${source}`);
+        return next(ApiError.internal('Internal validation error', null, 'VALIDATOR_CONFIG_ERROR'));
+      }
+
       // Get data to validate based on source
       const dataToValidate = req[source];
       
-      if (!dataToValidate) {
+      // Check for empty data when required
+      if (!dataToValidate || (typeof dataToValidate === 'object' && Object.keys(dataToValidate).length === 0)) {
+        // Check if the schema requires data
+        const isRequired = schema._flags?.presence === 'required';
+        
         // If data source is empty but required for validation
-        if (['body', 'params'].includes(source) && schema._flags?.presence === 'required') {
-          return next(new ApiError(`No ${source} data provided`, 400, null, 'VALIDATION_ERROR'));
+        if (['body', 'params'].includes(source) && isRequired) {
+          return next(ApiError.badRequest(`No ${source} data provided`, null, 'VALIDATION_ERROR'));
         }
-        // If query parameters are optional, continue
-        if (source === 'query') {
+        
+        // If query parameters are optional or empty object is valid, continue
+        if (source === 'query' || !isRequired) {
           return next();
         }
       }
@@ -51,7 +63,7 @@ const validate = (schema, source = 'body') => {
         // Log validation error
         const sanitizedData = { ...dataToValidate };
         // Remove sensitive fields from logs
-        ['password', 'newPassword', 'currentPassword', 'token'].forEach(field => {
+        ['password', 'newPassword', 'currentPassword', 'token', 'refreshToken', 'apiKey'].forEach(field => {
           if (sanitizedData[field]) {
             sanitizedData[field] = '[REDACTED]';
           }
@@ -66,7 +78,8 @@ const validate = (schema, source = 'body') => {
           userId: req.user?.id,
         });
 
-        return next(new ApiError('Validation failed', 400, validationErrors, 'VALIDATION_ERROR'));
+        // Use the built-in validationError method from your ApiError utility
+        return next(ApiError.validationError('Validation failed', validationErrors));
       }
 
       // Update request data with validated data (including type conversions)
@@ -79,7 +92,7 @@ const validate = (schema, source = 'body') => {
         url: req.originalUrl,
         method: req.method,
       });
-      return next(new ApiError('Validation processing error', 500, null, 'VALIDATOR_ERROR'));
+      return next(ApiError.internal('Validation processing error', null, 'VALIDATOR_ERROR'));
     }
   };
 };

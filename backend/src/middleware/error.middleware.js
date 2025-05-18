@@ -1,3 +1,4 @@
+// backend/src/middleware/error.middleware.js (Updated version)
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
 const { Sequelize } = require('sequelize');
@@ -11,11 +12,11 @@ const config = require('../config/config');
  * @param {Function} next - Express next middleware function
  */
 const errorHandler = (err, req, res, next) => {
-  // Prepare error information
-  let statusCode = 500;
-  let errorMessage = 'Internal server error';
-  let errorDetails = null;
-  let errorCode = err.code || 'SERVER_ERROR';
+  // Prepare error information (preserving original statusCode if set)
+  let statusCode = err.statusCode || 500;
+  let errorMessage = err.message || 'Internal server error';
+  let errorDetails = err.details || null;
+  let errorCode = err.code || `ERROR_${statusCode}`;
 
   // Collect request context for logging
   const requestContext = {
@@ -31,7 +32,7 @@ const errorHandler = (err, req, res, next) => {
   if (req.body) {
     const sanitizedBody = { ...req.body };
     // Remove sensitive fields
-    ['password', 'newPassword', 'currentPassword', 'token', 'refreshToken'].forEach(field => {
+    ['password', 'newPassword', 'currentPassword', 'token', 'refreshToken', 'apiKey'].forEach(field => {
       if (sanitizedBody[field]) {
         sanitizedBody[field] = '[REDACTED]';
       }
@@ -41,11 +42,8 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle different types of errors
   if (err instanceof ApiError) {
-    // Our custom API errors
-    statusCode = err.statusCode;
-    errorMessage = err.message;
-    errorDetails = err.details;
-    errorCode = err.code || `ERROR_${statusCode}`;
+    // Our custom API errors - use as is
+    // statusCode, errorMessage, errorDetails already set from err
   } else if (err instanceof Sequelize.ValidationError) {
     // Sequelize validation errors
     statusCode = 400;
@@ -106,6 +104,9 @@ const errorHandler = (err, req, res, next) => {
     statusCode = 401;
     errorMessage = 'Token expired';
     errorCode = 'TOKEN_EXPIRED';
+  } else if (statusCode === 404) {
+    // Handle 404 errors (properly preserve 404 status code)
+    errorCode = 'NOT_FOUND';
   }
 
   // Log error with appropriate level based on status code

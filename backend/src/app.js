@@ -10,6 +10,7 @@ const config = require('./config/config');
 const logger = require('./config/logger');
 const errorHandler = require('./middleware/error.middleware');
 const routes = require('./routes');
+const ApiError = require('./utils/api-error.util');
 
 // Initialize Express app
 const app = express();
@@ -89,9 +90,7 @@ app.get('/health', (req, res) => {
 
 // 404 handler
 app.use((req, res, next) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`);
-  error.statusCode = 404;
-  next(error);
+  next(ApiError.notFound(`Not Found - ${req.originalUrl}`));
 });
 
 // Error handling middleware

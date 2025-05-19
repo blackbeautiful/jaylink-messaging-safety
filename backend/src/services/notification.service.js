@@ -1,10 +1,13 @@
-// src/services/notification.service.js
+// backend/src/services/notification.service.js
+const { Op } = require('sequelize');
 const db = require('../models');
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
+const config = require('../config/config');
 
 const User = db.User;
 const Notification = db.Notification;
+const Setting = db.Setting;
 
 /**
  * Create a notification for a user
@@ -12,9 +15,10 @@ const Notification = db.Notification;
  * @param {string} title - Notification title
  * @param {string} message - Notification message
  * @param {string} type - Notification type (info, success, warning, error)
+ * @param {Object} metadata - Additional notification metadata
  * @returns {Object} Created notification
  */
-const createNotification = async (userId, title, message, type = 'info') => {
+const createNotification = async (userId, title, message, type = 'info', metadata = {}) => {
   try {
     // Check if user exists
     const user = await User.findByPk(userId);
@@ -23,18 +27,57 @@ const createNotification = async (userId, title, message, type = 'info') => {
       throw new ApiError('User not found', 404);
     }
     
+    // Check user notification settings
+    const userSettings = await Setting.findOne({
+      where: {
+        userId,
+        category: 'notifications'
+      }
+    });
+    
+    // Get notification settings or use defaults if not found
+    const notificationSettings = userSettings?.settings || {};
+    
+    // Check if notifications are enabled for this type
+    const settingKey = `${type}Notifications`;
+    if (notificationSettings[settingKey] === false) {
+      logger.debug(`${type} notifications disabled for user ${userId}`);
+      return null;
+    }
+    
     // Create notification
     const notification = await Notification.create({
       userId,
       title,
       message,
       type,
+      metadata: metadata ? JSON.stringify(metadata) : null,
       read: false,
     });
     
+    // If push notifications are enabled, queue push notification
+    if (config.notifications.pushEnabled && 
+        notificationSettings.pushNotifications !== false) {
+      try {
+        // Queue push notification (implementation depends on your push service)
+        // This would typically be processed by a worker outside the request cycle
+        queuePushNotification(userId, title, message, type, notification.id).catch(
+          err => logger.error(`Failed to queue push notification: ${err.message}`)
+        );
+      } catch (error) {
+        logger.error(`Push notification error: ${error.message}`);
+        // Continue even if push notification fails
+      }
+    }
+    
     return notification;
   } catch (error) {
-    logger.error(`Create notification error: ${error.message}`);
+    logger.error(`Create notification error: ${error.message}`, { 
+      stack: error.stack,
+      userId,
+      title,
+      type
+    });
     // Don't throw the error - notifications should be non-blocking
     return null;
   }
@@ -49,13 +92,27 @@ const createNotification = async (userId, title, message, type = 'info') => {
  * @returns {Object} Created notification
  */
 const createBalanceNotification = async (userId, operation, amount, newBalance) => {
-  const title = operation === 'add' ? 'Balance Added' : 'Balance Deducted';
-  const message = operation === 'add'
-    ? `$${amount} has been added to your account. Your new balance is $${newBalance}.`
-    : `$${amount} has been deducted from your account. Your new balance is $${newBalance}.`;
-  const type = operation === 'add' ? 'success' : 'info';
+  const currencySymbol = config.currency.symbol;
+  let title, message, type;
   
-  return createNotification(userId, title, message, type);
+  if (operation === 'add') {
+    title = 'Balance Added';
+    message = `${currencySymbol}${amount.toFixed(2)} has been added to your account. Your new balance is ${currencySymbol}${newBalance.toFixed(2)}.`;
+    type = 'success';
+  } else {
+    title = 'Balance Deducted';
+    message = `${currencySymbol}${amount.toFixed(2)} has been deducted from your account. Your new balance is ${currencySymbol}${newBalance.toFixed(2)}.`;
+    type = 'info';
+  }
+  
+  const metadata = {
+    operation,
+    amount,
+    newBalance,
+    currency: config.currency.code
+  };
+  
+  return createNotification(userId, title, message, type, metadata);
 };
 
 /**
@@ -65,7 +122,7 @@ const createBalanceNotification = async (userId, operation, amount, newBalance) 
  */
 const createPasswordResetNotification = async (userId) => {
   const title = 'Password Reset';
-  const message = 'Your password has been reset by an administrator. Check your email for the temporary password.';
+  const message = 'Your password has been reset. If you did not request this change, please contact support immediately.';
   const type = 'warning';
   
   return createNotification(userId, title, message, type);
@@ -82,7 +139,386 @@ const createStatusChangeNotification = async (userId, status) => {
   const message = `Your account status has been changed to "${status}".`;
   const type = status === 'active' ? 'success' : (status === 'suspended' ? 'warning' : 'error');
   
-  return createNotification(userId, title, message, type);
+  return createNotification(userId, title, message, type, { status });
+};
+
+/**
+ * Create a notification for successful payment
+ * @param {number} userId - User ID to notify
+ * @param {number} amount - Payment amount
+ * @param {string} paymentMethod - Payment method
+ * @param {string} reference - Payment reference
+ * @returns {Object} Created notification
+ */
+const createPaymentNotification = async (userId, amount, paymentMethod, reference) => {
+  const currencySymbol = config.currency.symbol;
+  const title = 'Payment Successful';
+  const message = `Your payment of ${currencySymbol}${amount.toFixed(2)} via ${paymentMethod} was successful.`;
+  const type = 'success';
+  
+  return createNotification(userId, title, message, type, { 
+    amount, 
+    paymentMethod, 
+    reference,
+    currency: config.currency.code
+  });
+};
+
+/**
+ * Create a notification for message delivery
+ * @param {number} userId - User ID to notify
+ * @param {string} messageId - Message ID
+ * @param {number} recipients - Number of recipients
+ * @param {number} delivered - Number of delivered messages
+ * @param {number} failed - Number of failed messages
+ * @returns {Object} Created notification
+ */
+const createMessageDeliveryNotification = async (userId, messageId, recipients, delivered, failed) => {
+  // Skip if all messages were delivered
+  if (failed === 0) {
+    return null;
+  }
+  
+  const title = 'Message Delivery Status';
+  const message = `Your message (ID: ${messageId}) was sent to ${recipients} recipients. ${delivered} delivered, ${failed} failed.`;
+  const type = failed > 0 ? 'warning' : 'success';
+  
+  return createNotification(userId, title, message, type, { 
+    messageId, 
+    recipients, 
+    delivered, 
+    failed 
+  });
+};
+
+/**
+ * Get user notifications with pagination
+ * @param {number} userId - User ID
+ * @param {Object} options - Query options
+ * @returns {Object} Notifications with pagination
+ */
+const getUserNotifications = async (userId, options = {}) => {
+  try {
+    const { page = 1, limit = 20, read, type, startDate, endDate } = options;
+    const offset = (page - 1) * limit;
+    
+    // Build where clause
+    const whereClause = { userId };
+    
+    if (read !== undefined) {
+      whereClause.read = read === 'true' || read === true;
+    }
+    
+    if (type) {
+      whereClause.type = type;
+    }
+    
+    if (startDate && endDate) {
+      whereClause.createdAt = {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      };
+    } else if (startDate) {
+      whereClause.createdAt = {
+        [Op.gte]: new Date(startDate),
+      };
+    } else if (endDate) {
+      whereClause.createdAt = {
+        [Op.lte]: new Date(endDate),
+      };
+    }
+    
+    // Query notifications
+    const { count, rows } = await Notification.findAndCountAll({
+      where: whereClause,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+    
+    // Parse metadata JSON
+    const notifications = rows.map(notification => {
+      const notif = notification.toJSON();
+      try {
+        if (notif.metadata) {
+          notif.metadata = JSON.parse(notif.metadata);
+        }
+      } catch (error) {
+        logger.warn(`Failed to parse notification metadata for ID ${notif.id}`);
+        notif.metadata = {};
+      }
+      return notif;
+    });
+    
+    // Calculate total pages
+    const totalPages = Math.ceil(count / limit);
+    
+    // Get unread count
+    const unreadCount = await Notification.count({
+      where: { 
+        userId,
+        read: false
+      }
+    });
+    
+    return {
+      notifications,
+      pagination: {
+        total: count,
+        totalPages,
+        currentPage: parseInt(page, 10),
+        limit: parseInt(limit, 10),
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+      unreadCount
+    };
+  } catch (error) {
+    logger.error(`Get user notifications error: ${error.message}`, { 
+      stack: error.stack,
+      userId,
+      options
+    });
+    throw error;
+  }
+};
+
+/**
+ * Mark notifications as read
+ * @param {number} userId - User ID
+ * @param {number|Array} notificationIds - Notification ID(s) to mark as read
+ * @returns {Object} Success status with count
+ */
+const markAsRead = async (userId, notificationIds) => {
+  try {
+    // If notificationIds is 'all', mark all as read
+    if (notificationIds === 'all') {
+      const result = await Notification.update(
+        { read: true },
+        { where: { userId, read: false } }
+      );
+      
+      return {
+        success: true,
+        updated: result[0],
+        message: `Marked ${result[0]} notifications as read`
+      };
+    }
+    
+    // Convert single ID to array
+    const ids = Array.isArray(notificationIds) ? notificationIds : [notificationIds];
+    
+    // Validate the array
+    if (!ids.length) {
+      throw new ApiError('No notification IDs provided', 400);
+    }
+    
+    // Update notifications
+    const result = await Notification.update(
+      { read: true },
+      { 
+        where: { 
+          id: { [Op.in]: ids },
+          userId // Ensure user can only update their own notifications
+        } 
+      }
+    );
+    
+    return {
+      success: true,
+      updated: result[0],
+      message: `Marked ${result[0]} notifications as read`
+    };
+  } catch (error) {
+    logger.error(`Mark notifications as read error: ${error.message}`, { 
+      stack: error.stack,
+      userId,
+      notificationIds
+    });
+    throw error;
+  }
+};
+
+/**
+ * Delete notifications
+ * @param {number} userId - User ID
+ * @param {number|Array} notificationIds - Notification ID(s) to delete
+ * @returns {Object} Success status with count
+ */
+const deleteNotifications = async (userId, notificationIds) => {
+  try {
+    // Convert single ID to array
+    const ids = Array.isArray(notificationIds) ? notificationIds : [notificationIds];
+    
+    // Validate the array
+    if (!ids.length) {
+      throw new ApiError('No notification IDs provided', 400);
+    }
+    
+    // Delete notifications
+    const deleted = await Notification.destroy({
+      where: { 
+        id: { [Op.in]: ids },
+        userId // Ensure user can only delete their own notifications
+      }
+    });
+    
+    return {
+      success: true,
+      deleted,
+      message: `Deleted ${deleted} notifications`
+    };
+  } catch (error) {
+    logger.error(`Delete notifications error: ${error.message}`, { 
+      stack: error.stack,
+      userId,
+      notificationIds
+    });
+    throw error;
+  }
+};
+
+/**
+ * Clean up old notifications
+ * @param {number} days - Number of days to keep notifications (default from config)
+ * @returns {Object} Cleanup result
+ */
+const cleanupOldNotifications = async (days = null) => {
+  try {
+    // Use provided days or get from config
+    const retentionDays = days || config.notifications.retentionDays || 30;
+    
+    // Calculate cutoff date
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+    
+    // Delete old notifications
+    const deleted = await Notification.destroy({
+      where: {
+        createdAt: {
+          [Op.lt]: cutoffDate
+        }
+      }
+    });
+    
+    logger.info(`Cleaned up ${deleted} old notifications older than ${retentionDays} days`);
+    
+    return {
+      success: true,
+      deleted,
+      retentionDays
+    };
+  } catch (error) {
+    logger.error(`Cleanup old notifications error: ${error.message}`, { 
+      stack: error.stack
+    });
+    // Don't throw error as this is a maintenance operation
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Get notification statistics
+ * @param {number} userId - User ID (optional, for admin use)
+ * @returns {Object} Notification stats
+ */
+const getNotificationStats = async (userId = null) => {
+  try {
+    const whereClause = userId ? { userId } : {};
+    
+    // Get total count
+    const totalCount = await Notification.count({
+      where: whereClause
+    });
+    
+    // Get unread count
+    const unreadCount = await Notification.count({
+      where: {
+        ...whereClause,
+        read: false
+      }
+    });
+    
+    // Get counts by type
+    const typePromises = ['info', 'success', 'warning', 'error'].map(type => 
+      Notification.count({
+        where: {
+          ...whereClause,
+          type
+        }
+      })
+    );
+    
+    const typeCounts = await Promise.all(typePromises);
+    
+    // Get recent notifications
+    const recentNotifications = await Notification.findAll({
+      where: whereClause,
+      limit: 5,
+      order: [['createdAt', 'DESC']]
+    });
+    
+    return {
+      totalCount,
+      unreadCount,
+      readCount: totalCount - unreadCount,
+      types: {
+        info: typeCounts[0],
+        success: typeCounts[1],
+        warning: typeCounts[2],
+        error: typeCounts[3]
+      },
+      recentNotifications: recentNotifications.map(notification => {
+        const notif = notification.toJSON();
+        try {
+          if (notif.metadata) {
+            notif.metadata = JSON.parse(notif.metadata);
+          }
+        } catch (error) {
+          notif.metadata = {};
+        }
+        return notif;
+      })
+    };
+  } catch (error) {
+    logger.error(`Get notification stats error: ${error.message}`, { 
+      stack: error.stack,
+      userId
+    });
+    throw error;
+  }
+};
+
+/**
+ * Queue push notification for processing
+ * @private
+ */
+const queuePushNotification = async (userId, title, message, type, notificationId) => {
+  // This is a placeholder for your actual push notification implementation
+  // In a real app, this would typically:
+  // 1. Get user's FCM/APNS tokens from database
+  // 2. Format the notification payload for the respective platform
+  // 3. Queue the notification to be sent asynchronously
+  
+  logger.debug(`Queued push notification for user ${userId}: ${title}`);
+  
+  // Example implementation with a worker queue would be:
+  // return queue.add('sendPushNotification', {
+  //   userId,
+  //   title,
+  //   message,
+  //   type,
+  //   notificationId
+  // });
+  
+  // For now, we'll just return a resolved promise
+  return Promise.resolve({
+    queued: true,
+    userId,
+    notificationId
+  });
 };
 
 module.exports = {
@@ -90,4 +526,11 @@ module.exports = {
   createBalanceNotification,
   createPasswordResetNotification,
   createStatusChangeNotification,
+  createPaymentNotification,
+  createMessageDeliveryNotification,
+  getUserNotifications,
+  markAsRead,
+  deleteNotifications,
+  cleanupOldNotifications,
+  getNotificationStats
 };

@@ -1,3 +1,4 @@
+// backend/src/routes/sms.routes.js
 const express = require('express');
 const smsController = require('../controllers/sms.controller');
 const { authenticate } = require('../middleware/auth.middleware');

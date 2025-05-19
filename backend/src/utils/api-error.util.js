@@ -1,3 +1,4 @@
+// backend/src/utils/api-error.util.js
 /**
  * Custom API Error class
  * Extends Error to include API-specific properties

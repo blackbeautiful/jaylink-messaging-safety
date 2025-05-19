@@ -1,4 +1,4 @@
-// src/services/user.service.js - Enhanced implementation
+// backend/src/services/user.service.js
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
 const logger = require('../config/logger');

@@ -12,6 +12,7 @@ const Dashboard = () => {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState(null);
+  const [balance, setBalance] = useState(null);
   const [recentMessages, setRecentMessages] = useState([]);
 
   useEffect(() => {

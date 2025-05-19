@@ -1,22 +1,88 @@
-// backend/src/middleware/error.middleware.js (Updated version)
+// backend/src/middleware/error.middleware.js (Improved version)
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
 const { Sequelize } = require('sequelize');
 const config = require('../config/config');
 
 /**
- * Error handling middleware
+ * Maps various error types to standardized ApiError instances
+ * @param {Error} err - Original error object
+ * @returns {ApiError} Standardized API error
+ */
+const mapErrorToApiError = (err) => {
+  // Already an ApiError, return as is
+  if (err instanceof ApiError) {
+    return err;
+  }
+
+  // Handle Sequelize errors
+  if (err instanceof Sequelize.ValidationError) {
+    return ApiError.validationError(
+      'Validation error',
+      err.errors.map(e => ({ field: e.path, message: e.message }))
+    );
+  } else if (err instanceof Sequelize.UniqueConstraintError) {
+    return ApiError.conflict(
+      'Duplicate entry',
+      err.errors.map(e => ({ field: e.path, message: e.message }))
+    );
+  } else if (err instanceof Sequelize.ForeignKeyConstraintError) {
+    return ApiError.badRequest('Invalid relationship reference', null, 'FOREIGN_KEY_ERROR');
+  } else if (err instanceof Sequelize.DatabaseError) {
+    // Special handling for pagination errors
+    if (err.parent?.code === 'ER_PARSE_ERROR' && err.sql?.includes('LIMIT')) {
+      return ApiError.badRequest('Invalid pagination parameters', null, 'INVALID_PAGINATION');
+    } else {
+      return ApiError.internal('Database operation failed', null, 'DATABASE_ERROR');
+    }
+  } 
+  // Handle JWT errors
+  else if (err.name === 'JsonWebTokenError') {
+    return ApiError.unauthorized('Invalid token', null, 'INVALID_TOKEN');
+  } else if (err.name === 'TokenExpiredError') {
+    return ApiError.unauthorized('Token expired', null, 'TOKEN_EXPIRED');
+  }
+  // Handle HTTP errors with status codes
+  else if (err.statusCode) {
+    return new ApiError(err.message, err.statusCode, err.details, err.code);
+  }
+  // Fallback for generic errors
+  else {
+    return ApiError.internal(err.message);
+  }
+};
+
+/**
+ * Converts error to ApiError if needed
  * @param {Error} err - Error object
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
+const errorConverter = (err, req, res, next) => {  
+  const convertedError = mapErrorToApiError(err);
+  
+  // Preserve stack trace in development
+  if (config.env === 'development') {
+    convertedError.stack = err.stack;
+  }
+
+  next(convertedError);
+};
+
+/**
+ * Error handling middleware
+ * @param {Error} err - Error object (should be ApiError instance at this point)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
 const errorHandler = (err, req, res, next) => {
-  // Prepare error information (preserving original statusCode if set)
-  let statusCode = err.statusCode || 500;
-  let errorMessage = err.message || 'Internal server error';
-  let errorDetails = err.details || null;
-  let errorCode = err.code || `ERROR_${statusCode}`;
+  // At this point, err should always be an ApiError instance
+  const statusCode = err.statusCode;
+  const errorMessage = err.message;
+  const errorDetails = err.details;
+  const errorCode = err.code;
 
   // Collect request context for logging
   const requestContext = {
@@ -30,83 +96,16 @@ const errorHandler = (err, req, res, next) => {
 
   // Add sanitized body data for logging (exclude sensitive fields)
   if (req.body) {
+    const sensitiveFields = ['password', 'newPassword', 'currentPassword', 'token', 'refreshToken', 'apiKey'];
     const sanitizedBody = { ...req.body };
-    // Remove sensitive fields
-    ['password', 'newPassword', 'currentPassword', 'token', 'refreshToken', 'apiKey'].forEach(field => {
+    
+    sensitiveFields.forEach(field => {
       if (sanitizedBody[field]) {
         sanitizedBody[field] = '[REDACTED]';
       }
     });
-    requestContext.body = sanitizedBody;
-  }
-
-  // Handle different types of errors
-  if (err instanceof ApiError) {
-    // Our custom API errors - use as is
-    // statusCode, errorMessage, errorDetails already set from err
-  } else if (err instanceof Sequelize.ValidationError) {
-    // Sequelize validation errors
-    statusCode = 400;
-    errorMessage = 'Validation error';
-    errorDetails = err.errors.map((error) => ({
-      field: error.path,
-      message: error.message,
-    }));
-    errorCode = 'VALIDATION_ERROR';
-  } else if (err instanceof Sequelize.UniqueConstraintError) {
-    // Sequelize unique constraint errors
-    statusCode = 409;
-    errorMessage = 'Duplicate entry error';
-    errorDetails = err.errors.map((error) => ({
-      field: error.path,
-      message: error.message,
-    }));
-    errorCode = 'DUPLICATE_ERROR';
-  } else if (err instanceof Sequelize.ForeignKeyConstraintError) {
-    // Sequelize foreign key constraint errors
-    statusCode = 400;
-    errorMessage = 'Invalid relationship error';
-    errorCode = 'FOREIGN_KEY_ERROR';
-  } else if (err instanceof Sequelize.DatabaseError) {
-    // Other database errors - Special handling for pagination issue
-    statusCode = 500;
-    errorCode = 'DATABASE_ERROR';
     
-    // Specific handling for LIMIT parameter error
-    if (err.parent && err.parent.code === 'ER_PARSE_ERROR' && 
-        err.sql && err.sql.includes('LIMIT') && err.sql.includes('\'')) {
-      statusCode = 400;
-      errorMessage = 'Invalid pagination parameters. Please ensure page and limit are valid numbers.';
-      errorCode = 'INVALID_PAGINATION';
-    } else {
-      // Generic database error (don't expose details in production)
-      errorMessage = config.env === 'development' 
-        ? `Database error: ${err.message}`
-        : 'A database error occurred. Please try again later.';
-      
-      // Log detailed database error info
-      logger.error('Database error details:', {
-        message: err.message,
-        sql: err.sql,
-        params: err.parameters,
-        code: err.parent?.code,
-        errno: err.parent?.errno,
-        ...requestContext
-      });
-    }
-  } else if (err.name === 'JsonWebTokenError') {
-    // JWT errors
-    statusCode = 401;
-    errorMessage = 'Invalid token';
-    errorCode = 'INVALID_TOKEN';
-  } else if (err.name === 'TokenExpiredError') {
-    // JWT expiration errors
-    statusCode = 401;
-    errorMessage = 'Token expired';
-    errorCode = 'TOKEN_EXPIRED';
-  } else if (statusCode === 404) {
-    // Handle 404 errors (properly preserve 404 status code)
-    errorCode = 'NOT_FOUND';
+    requestContext.body = sanitizedBody;
   }
 
   // Log error with appropriate level based on status code
@@ -132,4 +131,8 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
-module.exports = errorHandler;
+module.exports = {
+  errorConverter,
+  errorHandler,
+  mapErrorToApiError // Exported for testing
+};

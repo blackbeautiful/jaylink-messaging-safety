@@ -117,7 +117,7 @@ const DashboardStats = ({ analytics, loading }: DashboardStatsProps) => {
       />
       <StatCard
         title="Balance"
-        value={`$${balance.toFixed(2)}`}
+        value={`₦${balance.toFixed(2)}`}
         icon={<Wallet size={20} />}
         delay={3}
       />

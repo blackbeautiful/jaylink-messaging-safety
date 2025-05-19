@@ -1,4 +1,4 @@
-// src/config/database.js
+// backend/src/config/database.js
 const config = require('./config');
 const logger = require('./logger');
 

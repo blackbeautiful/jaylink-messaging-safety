@@ -1,4 +1,4 @@
-// src/routes/balance.routes.js
+// backend/src/routes/balance.routes.js
 const express = require('express');
 const balanceController = require('../controllers/balance.controller');
 const { authenticate } = require('../middleware/auth.middleware');

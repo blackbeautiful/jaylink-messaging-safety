@@ -1,3 +1,4 @@
+// backend/src/workers/scheduled-processor.js
 /**
  * Scheduled messages processor
  */

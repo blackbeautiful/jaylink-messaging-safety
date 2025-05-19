@@ -1,3 +1,4 @@
+// backend/src/services/email.service.js
 const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 const path = require('path');

@@ -1,18 +1,22 @@
+// backend/src/routes/index.js
 const express = require('express');
-const router = express.Router();
 const { rateLimit } = require('express-rate-limit');
 const config = require('../config/config');
 
 // Import routes
 const authRoutes = require('./auth.routes');
 const userRoutes = require('./user.routes');
-const healthRoutes = require('./health.routes');
-const adminRoutes = require('./admin');
 const balanceRoutes = require('./balance.routes');
 const contactRoutes = require('./contact.routes');
 const groupRoutes = require('./group.routes');
 const smsRoutes = require('./sms.routes');
 const scheduledRoutes = require('./scheduled.routes');
+const notificationRoutes = require('./notification.routes');
+const paymentRoutes = require('./payment.routes');
+const healthRoutes = require('./health.routes');
+const adminRoutes = require('./admin');
+
+const router = express.Router();
 
 // Rate limiters
 const authLimiter = rateLimit({
@@ -46,16 +50,64 @@ const smsLimiter = rateLimit({
   },
 });
 
-// Mount routes with appropriate rate limiters
-router.use('/auth', authLimiter, authRoutes);
-router.use('/users', userRoutes);
-router.use('/health', healthRoutes);
-router.use('/admin', adminRoutes);
-router.use('/balance', balanceRoutes);
-router.use('/contacts', contactRoutes);
-router.use('/groups', groupRoutes);
-router.use('/sms', smsLimiter, smsRoutes);
-router.use('/scheduled', scheduledRoutes);
+// Define API route configuration
+const apiRoutes = [
+  {
+    path: '/auth',
+    route: authRoutes,
+    middleware: [authLimiter]
+  },
+  {
+    path: '/users',
+    route: userRoutes
+  },
+  {
+    path: '/balance',
+    route: balanceRoutes
+  },
+  {
+    path: '/contacts',
+    route: contactRoutes
+  },
+  {
+    path: '/groups',
+    route: groupRoutes
+  },
+  {
+    path: '/sms',
+    route: smsRoutes,
+    middleware: [smsLimiter]
+  },
+  {
+    path: '/scheduled',
+    route: scheduledRoutes
+  },
+  {
+    path: '/notifications',
+    route: notificationRoutes
+  },
+  {
+    path: '/payments',
+    route: paymentRoutes
+  },
+  {
+    path: '/health',
+    route: healthRoutes
+  },
+  {
+    path: '/admin',
+    route: adminRoutes
+  }
+];
+
+// Mount routes with their middlewares
+apiRoutes.forEach((route) => {
+  if (route.middleware) {
+    router.use(route.path, ...route.middleware, route.route);
+  } else {
+    router.use(route.path, route.route);
+  }
+});
 
 // API information route
 router.get('/', (req, res) => {
@@ -63,6 +115,7 @@ router.get('/', (req, res) => {
     name: 'JayLink API',
     version: '1.0.0',
     description: 'API for JayLink SMS and Voice Messaging Platform',
+    currency: config.currency?.code || 'NGN'
   });
 });
 

@@ -1,3 +1,4 @@
+// backend/src/utils/database-seeder.util.js
 const bcrypt = require('bcrypt');
 const db = require('../models');
 const config = require('../config/config');

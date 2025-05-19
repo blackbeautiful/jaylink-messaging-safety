@@ -1,3 +1,4 @@
+// backend/src/services/balance.service.js
 const { Op } = require('sequelize');
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
@@ -5,10 +6,14 @@ const logger = require('../config/logger');
 const notificationService = require('./notification.service');
 const emailService = require('./email.service');
 const { generateUniqueId } = require('../utils/id.util');
+const config = require('../config/config');
 
 const User = db.User;
 const Transaction = db.Transaction;
 const SystemSetting = db.SystemSetting;
+
+// Get currency configuration
+const currency = config.currency;
 
 /**
  * Get user balance
@@ -49,7 +54,8 @@ const getBalance = async (userId) => {
 
     return {
       balance: parseFloat(user.balance),
-      currency: 'USD',
+      currency: currency.code,
+      currencySymbol: currency.symbol,
       lastUpdated: new Date(),
     };
   } catch (error) {
@@ -86,7 +92,7 @@ const getTransactions = async (userId, options = {}) => {
       };
     } else if (endDate) {
       whereClause.createdAt = {
-        [Op.lte]: new Date(endDate),
+        [Op.lte]: new Date(endDate)
       };
     }
     
@@ -98,11 +104,19 @@ const getTransactions = async (userId, options = {}) => {
       order: [['createdAt', 'DESC']],
     });
     
+    // Format transaction amounts with currency information
+    const transactions = rows.map(transaction => {
+      const transObj = transaction.toJSON();
+      transObj.currencyCode = currency.code;
+      transObj.currencySymbol = currency.symbol;
+      return transObj;
+    });
+    
     // Calculate total pages
     const totalPages = Math.ceil(count / limit);
     
     return {
-      transactions: rows,
+      transactions,
       pagination: {
         total: count,
         totalPages,
@@ -111,6 +125,11 @@ const getTransactions = async (userId, options = {}) => {
         hasNext: page < totalPages,
         hasPrev: page > 1,
       },
+      currency: {
+        code: currency.code,
+        symbol: currency.symbol,
+        name: currency.name
+      }
     };
   } catch (error) {
     logger.error(`Get transactions service error: ${error.message}`, { stack: error.stack, userId, options });
@@ -157,17 +176,18 @@ const addBalance = async (userId, amount, paymentMethod) => {
         service: 'top-up',
         status: 'completed',
         description: `Account top-up via ${paymentMethod}`,
+        currency: currency.code,
       }, { transaction: t });
       
       // Commit transaction
       await t.commit();
       
       // Create notification
-      notificationService.createNotification(
-        userId,
-        'Balance Updated',
-        `Your account has been credited with $${amount.toFixed(2)} via ${paymentMethod}.`,
-        'success'
+      notificationService.createBalanceNotification(
+        userId, 
+        'add',
+        amount, 
+        newBalance
       ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
       
       return {
@@ -175,6 +195,8 @@ const addBalance = async (userId, amount, paymentMethod) => {
         status: transaction.status,
         amount: parseFloat(amount),
         balance: newBalance,
+        currency: currency.code,
+        currencySymbol: currency.symbol,
       };
     } catch (error) {
       // Rollback transaction
@@ -232,10 +254,19 @@ const deductBalance = async (userId, amount, service, description) => {
         service,
         status: 'completed',
         description,
+        currency: currency.code,
       }, { transaction: t });
       
       // Commit transaction
       await t.commit();
+      
+      // Create deduction notification
+      notificationService.createBalanceNotification(
+        userId, 
+        'deduct',
+        amount, 
+        newBalance
+      ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
       
       // Check if balance is below threshold and send alert if needed
       checkLowBalance(userId, newBalance).catch(err => 
@@ -247,6 +278,8 @@ const deductBalance = async (userId, amount, service, description) => {
         status: transaction.status,
         amount: parseFloat(amount),
         balance: newBalance,
+        currency: currency.code,
+        currencySymbol: currency.symbol,
       };
     } catch (error) {
       // Rollback transaction
@@ -265,9 +298,10 @@ const deductBalance = async (userId, amount, service, description) => {
  * @param {string} paymentId - Payment gateway reference ID
  * @param {number} amount - Payment amount
  * @param {string} status - Payment status
+ * @param {string} paymentMethod - Payment method
  * @returns {Object} Payment result
  */
-const processPayment = async (userId, paymentId, amount, status) => {
+const processPayment = async (userId, paymentId, amount, status, paymentMethod = 'Paystack') => {
   try {
     // Get user
     const user = await User.findByPk(userId);
@@ -296,14 +330,16 @@ const processPayment = async (userId, paymentId, amount, status) => {
           balanceAfter: newBalance,
           service: 'payment',
           status: 'completed',
-          description: `Payment processed successfully. Reference: ${paymentId}`,
+          description: `Payment processed successfully via ${paymentMethod}. Reference: ${paymentId}`,
+          currency: currency.code,
+          metadata: JSON.stringify({ paymentId, method: paymentMethod }),
         }, { transaction: t });
         
         // Create notification
         notificationService.createNotification(
           userId,
           'Payment Successful',
-          `Your payment of $${amount.toFixed(2)} has been processed successfully.`,
+          `Your payment of ${currency.symbol}${amount.toFixed(2)} has been processed successfully.`,
           'success'
         ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
       } else {
@@ -316,14 +352,16 @@ const processPayment = async (userId, paymentId, amount, status) => {
           balanceAfter: user.balance,
           service: 'payment',
           status: 'failed',
-          description: `Payment failed. Reference: ${paymentId}`,
+          description: `Payment failed via ${paymentMethod}. Reference: ${paymentId}`,
+          currency: currency.code,
+          metadata: JSON.stringify({ paymentId, method: paymentMethod, status }),
         }, { transaction: t });
         
         // Create notification
         notificationService.createNotification(
           userId,
           'Payment Failed',
-          `Your payment of $${amount.toFixed(2)} failed to process. Please try again or contact support.`,
+          `Your payment of ${currency.symbol}${amount.toFixed(2)} failed to process. Please try again or contact support.`,
           'error'
         ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
       }
@@ -337,6 +375,8 @@ const processPayment = async (userId, paymentId, amount, status) => {
         paymentId,
         amount: parseFloat(amount),
         balance: parseFloat(user.balance) + (status === 'success' ? parseFloat(amount) : 0),
+        currency: currency.code,
+        currencySymbol: currency.symbol,
       };
     } catch (error) {
       // Rollback transaction
@@ -345,6 +385,69 @@ const processPayment = async (userId, paymentId, amount, status) => {
     }
   } catch (error) {
     logger.error(`Process payment service error: ${error.message}`, { stack: error.stack, userId, paymentId });
+    throw error;
+  }
+};
+
+/**
+ * Process Paystack webhook payment notification
+ * @param {Object} webhookData - Webhook data from Paystack
+ * @returns {Object} Processing result
+ */
+const processPaystackWebhook = async (webhookData) => {
+  try {
+    const { reference, amount, status, userId } = webhookData;
+    
+    if (!userId) {
+      logger.warn('Paystack webhook missing userId in metadata', { reference });
+      throw new ApiError('User ID not found in payment metadata', 400);
+    }
+    
+    // Convert amount from kobo to Naira
+    const amountInNaira = amount / 100;
+    
+    // Map Paystack status to our system status
+    let paymentStatus;
+    if (status === 'completed' || status === 'success') {
+      paymentStatus = 'success';
+    } else if (status === 'failed' || status === 'abandoned') {
+      paymentStatus = 'failed';
+    } else {
+      paymentStatus = 'pending';
+    }
+    
+    // Only process completed or failed payments
+    if (paymentStatus === 'pending') {
+      return {
+        processed: false,
+        reference,
+        status: paymentStatus,
+        message: 'Payment still pending, no action taken'
+      };
+    }
+    
+    // Process the payment
+    const result = await processPayment(
+      userId,
+      reference,
+      amountInNaira,
+      paymentStatus,
+      'Paystack'
+    );
+    
+    return {
+      processed: true,
+      reference,
+      status: paymentStatus,
+      transactionId: result.transactionId,
+      amount: amountInNaira,
+      currency: currency.code
+    };
+  } catch (error) {
+    logger.error(`Process Paystack webhook error: ${error.message}`, { 
+      stack: error.stack,
+      reference: webhookData.reference
+    });
     throw error;
   }
 };
@@ -363,17 +466,14 @@ const checkLowBalance = async (userId, balance) => {
       throw new Error('User not found');
     }
     
-    // Get minimum balance threshold from system settings
+    // Get minimum balance threshold from system settings or config defaults
     const settingRow = await SystemSetting.findOne({ 
       where: { settingKey: 'minimumBalanceThreshold' } 
     });
     
-    if (!settingRow) {
-      logger.warn('Minimum balance threshold setting not found');
-      return;
-    }
-    
-    const threshold = parseFloat(settingRow.settingValue);
+    const threshold = settingRow 
+      ? parseFloat(settingRow.settingValue) 
+      : config.systemDefaults.minimumBalanceThreshold;
     
     // Check if balance is below threshold
     if (balance < threshold) {
@@ -389,7 +489,7 @@ const checkLowBalance = async (userId, balance) => {
       
       // Send email alert if enabled
       if (notificationSettings.lowBalanceAlerts !== false) {
-        emailService.sendLowBalanceEmail(user, balance, threshold)
+        emailService.sendLowBalanceEmail(user, balance, threshold, currency)
           .catch(err => logger.error(`Failed to send low balance email: ${err.message}`));
       }
       
@@ -397,7 +497,7 @@ const checkLowBalance = async (userId, balance) => {
       notificationService.createNotification(
         userId,
         'Low Balance Alert',
-        `Your account balance is below the recommended minimum. Current balance: $${balance.toFixed(2)}`,
+        `Your account balance is below the recommended minimum. Current balance: ${currency.symbol}${balance.toFixed(2)}`,
         'warning'
       ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
     }
@@ -429,6 +529,14 @@ const getBalanceSummary = async (userId) => {
       order: [['createdAt', 'DESC']],
     });
     
+    // Format transactions with currency information
+    const formattedTransactions = recentTransactions.map(transaction => {
+      const transObj = transaction.toJSON();
+      transObj.currencyCode = currency.code;
+      transObj.currencySymbol = currency.symbol;
+      return transObj;
+    });
+    
     // Calculate spending for current month
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -448,13 +556,26 @@ const getBalanceSummary = async (userId) => {
       where: { userId },
     });
 
+    // Get minimum balance threshold from system settings or config defaults
+    const settingRow = await SystemSetting.findOne({ 
+      where: { settingKey: 'minimumBalanceThreshold' } 
+    });
+    
+    const minimumBalanceThreshold = settingRow 
+      ? parseFloat(settingRow.settingValue) 
+      : config.systemDefaults.minimumBalanceThreshold;
+
     return {
       balance: parseFloat(user.balance),
-      currency: 'USD',
-      recentTransactions,
+      currency: currency.code,
+      currencySymbol: currency.symbol,
+      currencyName: currency.name,
+      recentTransactions: formattedTransactions,
       monthlySpending,
       transactionCount,
+      minimumBalanceThreshold,
       lastUpdated: new Date(),
+      lowBalance: parseFloat(user.balance) < minimumBalanceThreshold
     };
   } catch (error) {
     logger.error(`Get balance summary service error: ${error.message}`, { stack: error.stack, userId });
@@ -469,6 +590,7 @@ module.exports = {
   addBalance,
   deductBalance,
   processPayment,
+  processPaystackWebhook,
   checkLowBalance,
   getBalanceSummary,
 };

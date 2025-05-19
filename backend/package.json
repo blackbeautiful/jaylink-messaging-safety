@@ -11,9 +11,19 @@
     "lint:fix": "eslint . --fix",
     "migrate": "npx sequelize-cli db:migrate",
     "migrate:undo": "npx sequelize-cli db:migrate:undo",
+    "migrate:undo:all": "npx sequelize-cli db:migrate:undo:all",
+    "migrate:status": "npx sequelize-cli db:migrate:status",
+    "migrate:generate": "npx sequelize-cli migration:generate --name",
+    "migrate:production": "cross-env NODE_ENV=production npx sequelize-cli db:migrate",
+    "migrate:test": "cross-env NODE_ENV=test npx sequelize-cli db:migrate",
+    "db:backup": "node src/scripts/backup-database.js",
+    "setup": "pnpm install && pnpm run migrate:status",
+    "deploy": "pnpm run db:backup && pnpm run migrate:production && node src/server.js",
+    "railway:deploy": "pnpm install && pnpm run migrate && node src/server.js",
+    "railway:migrate": "cross-env NODE_ENV=production npx sequelize-cli db:migrate",
     "seed": "npx sequelize-cli db:seed:all",
     "seed:undo": "npx sequelize-cli db:seed:undo:all",
-    "setup-dirs": "mkdir -p src/templates/emails logs uploads/audio uploads/csv"
+    "setup-dirs": "node -e \"['src/templates/emails','logs','uploads/audio','uploads/csv','src/migrations','src/seeders'].forEach(d => require('fs').mkdirSync(d, { recursive: true }))\""
   },
   "author": "JayLink SMS",
   "license": "ISC",
@@ -38,6 +48,7 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "eslint": "^8.56.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.29.1",

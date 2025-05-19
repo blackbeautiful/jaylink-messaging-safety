@@ -5,8 +5,9 @@ module.exports = {
     username: 'jaylink_user',
     password: 'jaylinkdev123',
     database: 'jaylink_db',
-    host: '127.0.0.1',
+    host: 'localhost',
     dialect: 'mysql',
+    logging: console.log
   },
   test: {
     username: 'jaylink_user',
@@ -14,14 +15,16 @@ module.exports = {
     database: 'jaylink_db_test',
     host: '127.0.0.1',
     dialect: 'mysql',
+    logging: false
   },
   production: {
-    username: process.env.DB_USER || 'jaylink_user',
-    password: process.env.DB_PASSWORD || 'jaylinkdev123',
-    database: process.env.DB_NAME || 'jaylink_db',
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: process.env.DB_PORT || 3306,
+    username: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
     dialect: 'mysql',
+    logging: false,
     dialectOptions: {
       ssl: {
         require: true,

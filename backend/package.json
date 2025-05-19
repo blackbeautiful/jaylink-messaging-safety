@@ -19,7 +19,7 @@
     "db:backup": "node src/scripts/backup-database.js",
     "setup": "pnpm install && pnpm run migrate:status",
     "deploy": "pnpm run db:backup && pnpm run migrate:production && node src/server.js",
-    "railway:deploy": "pnpm install && pnpm run migrate && node src/server.js",
+    "railway:deploy": "pnpm install && pnpm run setup-dirs && pnpm run migrate && node src/server.js",
     "railway:migrate": "cross-env NODE_ENV=production npx sequelize-cli db:migrate",
     "seed": "npx sequelize-cli db:seed:all",
     "seed:undo": "npx sequelize-cli db:seed:undo:all",

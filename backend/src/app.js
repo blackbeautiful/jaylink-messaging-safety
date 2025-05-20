@@ -121,17 +121,19 @@ app.get('/health', (req, res) => {
 });
 
 // Serve static frontend files in production
-if (config.env === 'production' || config.env === 'staging') {
-  // Serve static frontend files
-  app.use(express.static(path.join(__dirname, '../public')));
+// if (config.env === 'production' || config.env === 'staging') {
+  
+// }
 
-  // For SPA routing - serve index.html for unmatched routes
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, '../public/index.html'));
-    }
-  });
-}
+// Serve static frontend files
+app.use(express.static(path.join(__dirname, '../public')));
+
+// For SPA routing - serve index.html for unmatched routes
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+  }
+});
 
 // 404 handler for API routes
 app.use((req, res, next) => {

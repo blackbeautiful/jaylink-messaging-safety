@@ -64,6 +64,51 @@ router.delete(
  */
 router.delete('/:id', authenticate, notificationController.deleteNotification);
 
+/**
+ * @route PUT /api/notifications/settings
+ * @desc Update notification settings
+ * @access Private
+ */
+router.put(
+  '/settings',
+  authenticate,
+  validate(notificationValidator.updateSettings),
+  notificationController.updateSettings
+);
+
+/**
+ * @route GET /api/notifications/settings
+ * @desc Get notification settings
+ * @access Private
+ */
+router.get(
+  '/settings',
+  authenticate,
+  notificationController.getSettings
+);
+
+/**
+ * @route POST /api/notifications/device-token
+ * @desc Register device token for push notifications
+ * @access Private
+ */
+router.post(
+  '/device-token',
+  authenticate,
+  notificationController.registerDeviceToken
+);
+
+/**
+ * @route DELETE /api/notifications/device-token
+ * @desc Unregister device token
+ * @access Private
+ */
+router.delete(
+  '/device-token',
+  authenticate,
+  notificationController.unregisterDeviceToken
+);
+
 // Development-only routes
 if (process.env.NODE_ENV === 'development') {
   /**
@@ -74,7 +119,7 @@ if (process.env.NODE_ENV === 'development') {
   router.post(
     '/test',
     authenticate,
-    validate(notificationValidator.createTestNotificationSchema),
+    validate(notificationValidator.createTestNotification),
     notificationController.createTestNotification
   );
 }

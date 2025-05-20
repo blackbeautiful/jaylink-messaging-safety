@@ -44,8 +44,12 @@ const config = {
     directory: process.env.UPLOAD_DIR || 'uploads',
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10485760, // 10MB
     maxCsvSize: parseInt(process.env.MAX_CSV_SIZE, 10) || 5242880, // 5MB
-    allowedAudioTypes: (process.env.ALLOWED_AUDIO_TYPES || 'audio/mpeg,audio/wav,audio/ogg').split(','),
-    allowedCsvTypes: (process.env.ALLOWED_CSV_TYPES || 'text/csv,application/csv,text/plain').split(','),
+    allowedAudioTypes: (process.env.ALLOWED_AUDIO_TYPES || 'audio/mpeg,audio/wav,audio/ogg').split(
+      ','
+    ),
+    allowedCsvTypes: (process.env.ALLOWED_CSV_TYPES || 'text/csv,application/csv,text/plain').split(
+      ','
+    ),
   },
 
   // SMS Provider configuration
@@ -56,7 +60,7 @@ const config = {
     defaultSender: process.env.SMS_PROVIDER_DEFAULT_SENDER || 'JayLink',
     // Pricing configuration (in kobo per segment)
     pricing: {
-      localSms: parseInt(process.env.SMS_PRICING_LOCAL, 10) || 500, // 5 naira per local SMS
+      localSms: parseInt(process.env.SMS_PRICING_LOCAL, 10) || 300, // 3 naira per local SMS
       internationalSms: parseInt(process.env.SMS_PRICING_INTERNATIONAL, 10) || 1000, // 10 naira per international SMS
     },
     // Provider-specific configuration
@@ -88,7 +92,7 @@ const config = {
     port: parseInt(process.env.EMAIL_PORT, 10) || 587,
     user: process.env.EMAIL_USER || 'noreply@jaylink.com',
     password: process.env.EMAIL_PASSWORD || 'your_email_password',
-    from: process.env.EMAIL_FROM || 'JayLink SMS <noreply@jaylink.com>',
+    from: process.env.EMAIL_FROM || 'JayLink <noreply@jaylink.com>',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@jaylink.com',
     supportEmail: process.env.SUPPORT_EMAIL || 'support@jaylink.com',
   },
@@ -115,6 +119,23 @@ const config = {
     retentionDays: parseInt(process.env.NOTIFICATION_RETENTION_DAYS, 10) || 30,
   },
 
+  // Firebase configuration for push notifications
+  firebase: {
+    serviceAccount: process.env.FIREBASE_SERVICE_ACCOUNT,
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientId: process.env.FIREBASE_CLIENT_ID,
+    clientSecret: process.env.FIREBASE_CLIENT_SECRET,
+  },
+
+  // Redis configuration for queue system
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+    password: process.env.REDIS_PASSWORD,
+    tls: process.env.REDIS_TLS === 'true',
+  },
+
   // System settings defaults
   systemDefaults: {
     minimumBalanceThreshold: parseFloat(process.env.DEFAULT_MIN_BALANCE) || 500, // 500 Naira
@@ -136,7 +157,9 @@ const config = {
   },
 
   // CORS origins (multiple frontend URLs)
-  corsOrigins: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:8080'],
+  corsOrigins: process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',')
+    : ['http://localhost:8080'],
 
   // Logging configuration
   logging: {
@@ -160,7 +183,7 @@ if (config.env === 'production') {
     'PAYSTACK_WEBHOOK_SECRET',
   ];
 
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  const missingVars = requiredEnvVars.filter((varName) => !process.env[varName]);
   if (missingVars.length > 0) {
     console.warn(`Missing critical environment variables in production: ${missingVars.join(', ')}`);
     console.warn('Please set these variables for security and proper functioning.');

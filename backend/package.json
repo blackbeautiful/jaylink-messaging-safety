@@ -7,8 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest --runInBand",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix",
     "migrate": "npx sequelize-cli db:migrate",
     "migrate:undo": "npx sequelize-cli db:migrate:undo",
     "migrate:undo:all": "npx sequelize-cli db:migrate:undo:all",
@@ -30,6 +30,7 @@
   "dependencies": {
     "axios": "^1.9.0",
     "bcrypt": "^6.0.0",
+    "bull": "^4.16.5",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -37,6 +38,7 @@
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "firebase-admin": "^13.4.0",
     "handlebars": "^4.7.8",
     "helmet": "^7.1.0",
     "http-errors": "^2.0.0",
@@ -46,8 +48,11 @@
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.6.5",
     "nodemailer": "^6.9.11",
+    "redis": "^5.0.1",
     "sequelize": "^6.35.2",
-    "winston": "^3.11.0"
+    "uuid": "^11.1.0",
+    "winston": "^3.11.0",
+    "xss-clean": "^0.1.4"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
@@ -59,5 +64,11 @@
     "sequelize-cli": "^6.6.2",
     "supertest": "^6.3.3",
     "winston-daily-rotate-file": "^4.7.1"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ]
   }
 }

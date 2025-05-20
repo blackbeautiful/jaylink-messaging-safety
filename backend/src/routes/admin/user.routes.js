@@ -1,4 +1,4 @@
-// src/routes/admin/user.routes.js - Enhanced implementation
+// backend/src/routes/admin/user.routes.js
 const express = require('express');
 const adminUserController = require('../../controllers/admin/user.controller');
 const { authenticate, authorizeAdmin } = require('../../middleware/auth.middleware');

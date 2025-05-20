@@ -198,6 +198,128 @@ const deleteNotification = async (req, res, next) => {
 };
 
 /**
+ * Update notification settings
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const updateSettings = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      throw new ApiError('User not authenticated', 401);
+    }
+    
+    const userId = req.user.id;
+    const settings = req.body;
+    
+    if (!settings || Object.keys(settings).length === 0) {
+      throw new ApiError('No settings provided', 400);
+    }
+    
+    const result = await notificationService.updateNotificationSettings(userId, settings);
+    
+    return response.success(res, { settings: result }, 'Notification settings updated successfully');
+  } catch (error) {
+    logger.error(`Update settings controller error: ${error.message}`, { 
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Get notification settings
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const getSettings = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      throw new ApiError('User not authenticated', 401);
+    }
+    
+    const userId = req.user.id;
+    const settings = await notificationService.getUserSettings(userId);
+    
+    return response.success(res, { settings }, 'Notification settings retrieved successfully');
+  } catch (error) {
+    logger.error(`Get settings controller error: ${error.message}`, { 
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Register device token for push notifications
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const registerDeviceToken = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      throw new ApiError('User not authenticated', 401);
+    }
+    
+    const userId = req.user.id;
+    const { token, deviceType = 'web', deviceInfo = {} } = req.body;
+    
+    if (!token) {
+      throw new ApiError('Device token is required', 400);
+    }
+    
+    const result = await notificationService.registerDeviceToken(userId, token, deviceType, deviceInfo);
+    
+    return response.success(res, { 
+      registered: true,
+      deviceType,
+      active: result.active
+    }, 'Device token registered successfully');
+  } catch (error) {
+    logger.error(`Register device token controller error: ${error.message}`, { 
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Unregister device token
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const unregisterDeviceToken = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      throw new ApiError('User not authenticated', 401);
+    }
+    
+    const userId = req.user.id;
+    const { token } = req.body;
+    
+    if (!token) {
+      throw new ApiError('Device token is required', 400);
+    }
+    
+    const result = await notificationService.unregisterDeviceToken(userId, token);
+    
+    return response.success(res, result, 'Device token unregistered successfully');
+  } catch (error) {
+    logger.error(`Unregister device token controller error: ${error.message}`, { 
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    next(error);
+  }
+};
+
+/**
  * Create a test notification (for development/testing)
  * Only available in development mode
  * @param {Object} req - Express request object
@@ -216,7 +338,7 @@ const createTestNotification = async (req, res, next) => {
     }
     
     const userId = req.user.id;
-    const { title, message, type = 'info', metadata } = req.body;
+    const { title, message, type = 'info', metadata, sendEmail = false } = req.body;
     
     if (!title || !message) {
       throw new ApiError('Title and message are required', 400);
@@ -227,7 +349,8 @@ const createTestNotification = async (req, res, next) => {
       title,
       message,
       type,
-      metadata || {}
+      metadata || {},
+      sendEmail
     );
     
     return response.success(res, { notification }, 'Test notification created successfully');
@@ -247,5 +370,9 @@ module.exports = {
   markOneAsRead,
   deleteNotifications,
   deleteNotification,
+  updateSettings,
+  getSettings,
+  registerDeviceToken,
+  unregisterDeviceToken,
   createTestNotification
 };

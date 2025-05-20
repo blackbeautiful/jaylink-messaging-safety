@@ -1,4 +1,4 @@
-// src/routes/health.routes.js (Improved)
+// src/routes/health.routes.js
 const express = require('express');
 const db = require('../models');
 const response = require('../utils/response.util');
@@ -6,6 +6,9 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const config = require('../config/config');
+const { optionalAuthenticate } = require('../middleware/auth.middleware');
+const { collectAndProcessMetrics } = require('../utils/monitoring.util');
+const { checkBackupHealth } = require('../utils/backup.util');
 
 const router = express.Router();
 
@@ -53,9 +56,6 @@ router.get('/', async (req, res) => {
     healthStatus.services.fileSystem = 'inaccessible';
     healthStatus.services.fileSystemError = error.message;
   }
-
-  // Optional: Check other external services that are critical
-  // e.g., Redis, external APIs, etc.
 
   // Set appropriate status code based on health status
   if (healthStatus.status === 'ok') {
@@ -116,6 +116,134 @@ router.get('/db', async (req, res) => {
       },
       'Database connectivity issue',
       503
+    );
+  }
+});
+
+/**
+ * @route GET /api/health/extended
+ * @desc Extended health check with more detailed metrics
+ * @access Authenticated users
+ */
+router.get('/extended', optionalAuthenticate, async (req, res) => {
+  // If user is not authenticated, return limited info
+  if (!req.user) {
+    return response.error(
+      res,
+      {
+        timestamp: new Date().toISOString(),
+      },
+      'Authentication required for extended health information',
+      401
+    );
+  }
+  
+  try {
+    // For authenticated users, provide more detailed metrics
+    const metrics = await collectAndProcessMetrics();
+    
+    const healthStatus = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      system: {
+        memory: {
+          total: Math.round(metrics.system.totalMemory / 1024 / 1024) + 'MB',
+          free: Math.round(metrics.system.freeMemory / 1024 / 1024) + 'MB',
+          usedPercentage: ((metrics.system.totalMemory - metrics.system.freeMemory) / 
+                          metrics.system.totalMemory * 100).toFixed(2) + '%'
+        },
+        loadAverage: metrics.system.loadAverage,
+        platform: metrics.system.platform,
+        cpuCount: metrics.system.cpuCount || os.cpus().length
+      },
+      process: {
+        memory: {
+          rss: Math.round(metrics.process.memoryUsage.rss / 1024 / 1024) + 'MB',
+          heapTotal: Math.round(metrics.process.memoryUsage.heapTotal / 1024 / 1024) + 'MB',
+          heapUsed: Math.round(metrics.process.memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+          usedPercentage: (metrics.process.memoryUsage.heapUsed / metrics.process.memoryUsage.heapTotal * 100).toFixed(2) + '%'
+        },
+        uptime: metrics.process.uptime
+      },
+      database: {
+        status: metrics.database.status,
+        responseTime: metrics.database.status === 'connected' ? 
+          `${metrics.database.responseTime.toFixed(2)}ms` : 'N/A'
+      }
+    };
+    
+    // Check if there are any active alerts
+    if (metrics.alerts && metrics.alerts.length > 0) {
+      healthStatus.status = metrics.alerts.some(a => a.level === 'CRITICAL') ? 'critical' : 'warning';
+      healthStatus.alerts = metrics.alerts.map(a => ({
+        level: a.level,
+        message: a.message
+      }));
+    }
+    
+    return response.success(res, healthStatus);
+  } catch (error) {
+    return response.error(
+      res,
+      {
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        error: error.message
+      },
+      'Error retrieving extended health information',
+      500
+    );
+  }
+});
+
+/**
+ * @route GET /api/health/backup
+ * @desc Check backup status
+ * @access Authenticated users
+ */
+router.get('/backup', optionalAuthenticate, async (req, res) => {
+  // If user is not authenticated, return limited info
+  if (!req.user) {
+    return response.error(
+      res,
+      {
+        timestamp: new Date().toISOString(),
+      },
+      'Authentication required for backup status information',
+      401
+    );
+  }
+  
+  try {
+    // Get backup health status
+    const backupHealth = checkBackupHealth();
+    
+    // Create response based on backup health
+    const healthStatus = {
+      status: backupHealth.status === 'healthy' ? 'ok' : backupHealth.status,
+      timestamp: new Date().toISOString(),
+      backup: {
+        message: backupHealth.message,
+        lastBackup: backupHealth.lastBackupFile ? {
+          date: backupHealth.lastBackupFile.date,
+          size: backupHealth.lastBackupFile.size,
+          name: backupHealth.lastBackupFile.name
+        } : null
+      }
+    };
+    
+    return response.success(res, healthStatus);
+  } catch (error) {
+    return response.error(
+      res,
+      {
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        error: error.message
+      },
+      'Error retrieving backup status information',
+      500
     );
   }
 });

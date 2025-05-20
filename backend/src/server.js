@@ -1,318 +1,378 @@
-const app = require('./app');
-const db = require('./models');
-const config = require('./config/config');
-const logger = require('./config/logger');
-const initializeDatabase = require('./utils/database-seeder.util');
-const { startScheduledMessageProcessor } = require('./workers/scheduled-processor');
+// backend/src/server.js
+/**
+ * JayLink SMS Platform
+ * Enterprise-grade server initialization
+ */
 const path = require('path');
 const fs = require('fs');
-const { Op } = require('sequelize');
+const db = require('./models');
+const app = require('./app');
+const config = require('./config/config');
+const logger = require('./config/logger');
+const workers = require('./workers');
+const { setupDatabase } = require('./utils/database-setup.util');
+const { monitorSystemHealth } = require('./utils/monitoring.util');
 
-// Create required directories for application
-const ensureDirectories = () => {
+/**
+ * Application startup sequence
+ * Orchestrates the entire server startup process
+ */
+async function startServer() {
+  let server;
+  
+  try {
+    // Step 1: Log startup initiation
+    logger.info(`Starting JayLink SMS Platform server (${config.env} environment)`);
+    logger.info(`Node.js version: ${process.version}`);
+    logger.info(`Platform: ${process.platform} (${process.arch})`);
+    
+    // Step 2: Ensure required directories exist
+    await ensureDirectories();
+    
+    // Step 3: Initialize email templates
+    await initializeTemplates();
+    
+    // Step 4: Set up global error handlers
+    setupGlobalErrorHandlers();
+    
+    // Step 5: Setup database and schema
+    const dbSuccess = await setupDatabase();
+    
+    // Only continue starting services if database setup was successful
+    if (dbSuccess) {
+      // Step 6: Initialize subsystems
+      await initializeSubsystems();
+      
+      // Step 7: Start health monitoring
+      startHealthMonitoring();
+      
+      // Step 8: Start HTTP server
+      server = await startHttpServer();
+      
+      // Step 9: Set up graceful shutdown handlers
+      setupGracefulShutdown(server);
+      
+      // Step 10: Log successful startup
+      logSuccessfulStartup(server);
+    } else if (config.env === 'production') {
+      logger.error('Failed to set up database in production mode, exiting');
+      await gracefulExit(1);
+    }
+  } catch (error) {
+    logger.error('Fatal error during server startup:', error);
+    await gracefulExit(1);
+  }
+  
+  return server;
+}
+
+/**
+ * Create required directories for application
+ * @returns {Promise<void>}
+ */
+async function ensureDirectories() {
+  logger.info('Ensuring required directories exist');
+  
   const directories = [
     'logs',
     'uploads/audio',
     'uploads/csv',
+    'uploads/photos',
+    'uploads/temp',
     'src/templates/emails'
   ];
 
-  directories.forEach(dir => {
-    if (!fs.existsSync(dir)) {
-      try {
+  for (const dir of directories) {
+    try {
+      if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         logger.info(`Created directory: ${dir}`);
-      } catch (error) {
-        logger.warn(`Failed to create directory ${dir}: ${error.message}`);
       }
+    } catch (error) {
+      logger.warn(`Failed to create directory ${dir}: ${error.message}`);
     }
-  });
-};
+  }
+}
 
-// Initialize email templates
-const initializeTemplates = () => {
+/**
+ * Initialize email templates
+ * @returns {Promise<void>}
+ */
+async function initializeTemplates() {
+  logger.info('Initializing email templates');
+  
   try {
+    // Check if templates directory exists
+    const templatesDir = path.join(__dirname, 'templates');
+    if (!fs.existsSync(templatesDir)) {
+      logger.warn(`Email templates directory not found: ${templatesDir}`);
+      return;
+    }
+    
+    // Import templates module
     require('./templates');
     logger.info('Email templates initialized successfully');
   } catch (error) {
     logger.warn(`Email template initialization error: ${error.message}`);
     logger.warn('Continuing without email templates');
   }
-};
+}
 
-// Set up global error handlers
-const setupGlobalErrorHandlers = () => {
+/**
+ * Set up global error handlers
+ */
+function setupGlobalErrorHandlers() {
+  logger.info('Setting up global error handlers');
+  
   // Handle uncaught exceptions
   process.on('uncaughtException', (err) => {
-    logger.error('Uncaught Exception:', err);
+    logger.error('UNCAUGHT EXCEPTION! 💥 Shutting down...', err);
+    logger.error(err.name, err.message);
+    logger.error(err.stack);
+    
     // Give the logger time to write before exiting
-    setTimeout(() => process.exit(1), 1000);
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
   });
 
   // Handle unhandled promise rejections
   process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // Don't exit here as it's recoverable
+    logger.error('UNHANDLED REJECTION! 💥', { 
+      promise: promise.toString().substring(0, 100) + '...', 
+      reason: reason.toString().substring(0, 100) + '...' 
+    });
+    logger.error(reason);
+    
+    // Don't exit for unhandled rejections - they're often recoverable
   });
-};
+  
+  // Handle warning events
+  process.on('warning', (warning) => {
+    logger.warn(`Node.js Warning: ${warning.name}`, { 
+      message: warning.message,
+      stack: warning.stack
+    });
+  });
+}
 
-// Set up graceful shutdown handlers
-const setupGracefulShutdown = (server) => {
+/**
+ * Initialize subsystems
+ * @returns {Promise<void>}
+ */
+async function initializeSubsystems() {
+  logger.info('Initializing subsystems');
+  
+  try {
+    // Skip worker initialization in test environment
+    if (config.env !== 'test') {
+      // Initialize background workers
+      workers.initializeWorkers();
+      logger.info('Background workers initialized successfully');
+    } else {
+      logger.info('Test environment detected, skipping worker initialization');
+    }
+    
+    // Add additional subsystems initialization here as needed
+    
+  } catch (error) {
+    logger.error('Error initializing subsystems:', error);
+    if (config.env === 'production') {
+      throw error; // Re-throw in production
+    } else {
+      logger.warn('Continuing despite subsystem initialization errors in development mode');
+    }
+  }
+}
+
+/**
+ * Start system health monitoring
+ */
+function startHealthMonitoring() {
+  if (config.monitoring?.enabled) {
+    try {
+      logger.info('Starting system health monitoring');
+      monitorSystemHealth(config.monitoring.interval || 60000);
+    } catch (error) {
+      logger.error('Failed to start health monitoring:', error);
+    }
+  }
+}
+
+/**
+ * Start HTTP server
+ * @returns {Promise<http.Server>} The HTTP server instance
+ */
+function startHttpServer() {
+  return new Promise((resolve, reject) => {
+    try {
+      // Get port from config, normalizing to number
+      const port = normalizePort(config.port || 3000);
+      
+      // Start HTTP server
+      const server = app.listen(port);
+      
+      // Handle server events
+      server.on('error', (error) => {
+        handleServerError(error, port);
+        reject(error);
+      });
+      
+      server.on('listening', () => {
+        const addr = server.address();
+        const bind = typeof addr === 'string' ? `pipe ${addr}` : `port ${addr.port}`;
+        logger.info(`HTTP server listening on ${bind}`);
+        resolve(server);
+      });
+    } catch (error) {
+      logger.error('Failed to start HTTP server:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Normalize port into a number, string, or false
+ * @param {number|string} val - Port value
+ * @returns {number|string|false} Normalized port
+ */
+function normalizePort(val) {
+  const port = parseInt(val, 10);
+  
+  if (isNaN(port)) {
+    return val; // Named pipe
+  }
+  
+  if (port >= 0) {
+    return port; // Port number
+  }
+  
+  return false;
+}
+
+/**
+ * Handle server error
+ * @param {Error} error - Server error
+ * @param {number|string} port - Port that was attempted
+ */
+function handleServerError(error, port) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+  
+  const bind = typeof port === 'string' ? `Pipe ${port}` : `Port ${port}`;
+  
+  // Handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      logger.error(`${bind} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      logger.error(`${bind} is already in use`);
+      // Try with a different port in development
+      if (config.env !== 'production') {
+        logger.info(`Attempting to use alternative port`);
+        const newPort = typeof port === 'number' ? port + 1 : 0;
+        const server = app.listen(newPort);
+        const addr = server.address();
+        logger.info(`Server listening on port ${addr.port} instead`);
+      } else {
+        process.exit(1);
+      }
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Set up graceful shutdown handlers
+ * @param {http.Server} server - HTTP server instance
+ */
+function setupGracefulShutdown(server) {
   const gracefulShutdown = async (signal) => {
     logger.info(`${signal} received, shutting down gracefully`);
     let exitCode = 0;
-
+    
+    // Close the HTTP server first
     if (server) {
-      await new Promise((resolve) => {
-        server.close(() => {
-          logger.info('HTTP server closed');
-          resolve();
+      try {
+        await new Promise((resolve) => {
+          server.close(() => {
+            logger.info('HTTP server closed');
+            resolve();
+          });
         });
-      });
+      } catch (error) {
+        logger.error('Error closing HTTP server:', error);
+        exitCode = 1;
+      }
     }
-
+    
+    // Clean up other resources
     try {
+      // Close database connections
       if (db.sequelize) {
         logger.info('Closing database connections...');
         await db.sequelize.close();
         logger.info('Database connections closed successfully');
       }
+      
+      // Shutdown workers
+      if (workers.shutdown) {
+        logger.info('Shutting down workers...');
+        await workers.shutdown();
+        logger.info('Workers shut down successfully');
+      }
+      
+      // Add other cleanup tasks here
+      
     } catch (error) {
-      logger.error('Error during database shutdown:', error);
+      logger.error('Error during graceful shutdown:', error);
       exitCode = 1;
     }
-
+    
     logger.info('Graceful shutdown completed');
-    setTimeout(() => process.exit(exitCode), 500);
+    await gracefulExit(exitCode);
   };
-
+  
   // Handle termination signals
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-};
+}
 
-// Advanced database management with schema verification
-const setupDatabase = async () => {
-  try {
-    // First, check if we can connect to the database
-    await db.sequelize.authenticate();
-    logger.info('Database connection established successfully');
-
-    // Get all model names for verification
-    const modelNames = Object.keys(db).filter(key => 
-      key !== 'sequelize' && key !== 'Sequelize' && typeof db[key].tableName === 'string'
-    );
-    
-    // Verify if all required tables exist
-    const missingTables = [];
-    for (const modelName of modelNames) {
-      try {
-        // Try a simple query on each model
-        await db[modelName].findOne({
-          attributes: [Object.keys(db[modelName].rawAttributes)[0]],
-          limit: 1
-        });
-      } catch (error) {
-        if (error.name === 'SequelizeDatabaseError' && 
-            error.parent && 
-            (error.parent.code === 'ER_NO_SUCH_TABLE' || error.message.includes("doesn't exist"))) {
-          missingTables.push(modelName);
-        } else if (!error.message.includes("Unknown column")) {
-          // Rethrow if it's not just a missing column (which is handled by the sync)
-          throw error;
-        }
-      }
-    }
-
-    // Check for schema changes on existing tables
-    const tablesToUpdate = [];
-    const existingTables = modelNames.filter(model => !missingTables.includes(model));
-    
-    // Skip full schema verification in production for safety unless forced
-    const shouldVerifySchema = config.env !== 'production' || process.env.FORCE_SCHEMA_CHECK === 'true';
-    
-    if (shouldVerifySchema && existingTables.length > 0) {
-      logger.info('Verifying database schema...');
-      
-      for (const modelName of existingTables) {
-        try {
-          // Try to access all defined columns in the model
-          const model = db[modelName];
-          const columnNames = Object.keys(model.rawAttributes)
-            .filter(attr => !['createdAt', 'updatedAt'].includes(attr)); // Skip timestamps
-            
-          if (columnNames.length > 0) {
-            const columnSelects = columnNames.map(col => `\`${col}\``).join(',');
-            await db.sequelize.query(
-              `SELECT ${columnSelects} FROM \`${model.tableName}\` LIMIT 0`,
-              { type: db.sequelize.QueryTypes.SELECT }
-            );
-          }
-        } catch (error) {
-          if (error.name === 'SequelizeDatabaseError' && error.message.includes('Unknown column')) {
-            tablesToUpdate.push(modelName);
-          } else {
-            throw error;
-          }
-        }
-      }
-    }
-
-    // Handle database schema updates
-    if (missingTables.length > 0 || tablesToUpdate.length > 0) {
-      if (missingTables.length > 0) {
-        logger.info(`Missing tables detected: ${missingTables.join(', ')}`);
-      }
-      
-      if (tablesToUpdate.length > 0) {
-        logger.info(`Tables requiring updates: ${tablesToUpdate.join(', ')}`);
-      }
-
-      // Confirm sync operation in production to prevent accidents
-      if (config.env === 'production' && !process.env.ALLOW_DB_SYNC) {
-        logger.warn('Database schema changes detected in production, but ALLOW_DB_SYNC not set. Skipping sync.');
-        logger.warn('If you want to automatically update the schema in production, set ALLOW_DB_SYNC=true');
-      } else {
-        // Perform the sync - force:false prevents dropping tables
-        logger.info('Updating database schema...');
-        const syncOptions = { 
-          force: false, 
-          alter: true,
-          // Only sync specific models that need updating if we have existing tables
-          // This prevents unnecessarily locking all tables
-          model: missingTables.length === 0 ? 
-            tablesToUpdate.map(name => db[name]) : 
-            undefined
-        };
-        
-        await db.sequelize.sync(syncOptions);
-        logger.info('Database schema updated successfully');
-
-        // Initialize database with seed data if we had missing tables
-        if (missingTables.length > 0) {
-          logger.info('Initializing database with default data...');
-          await initializeDatabase();
-          logger.info('Database initialized successfully');
-        }
-      }
-    } else {
-      logger.info('All database tables exist and schema is up-to-date');
-    }
-
-    return true;
-  } catch (error) {
-    logger.error('Database setup error:', error);
-
-    // Special handling for when the database doesn't exist
-    if (error.name === 'SequelizeConnectionError' && 
-        error.parent && 
-        error.parent.code === 'ER_BAD_DB_ERROR') {
-      
-      logger.info('Database does not exist, attempting to create it...');
-      
-      try {
-        // Create a new Sequelize instance without specifying a database
-        const { Sequelize } = require('sequelize');
-        const tempSequelize = new Sequelize({
-          host: config.db.host,
-          port: config.db.port,
-          username: config.db.user,
-          password: config.db.password,
-          dialect: 'mysql',
-          logging: false,
-        });
-        
-        // Create the database
-        await tempSequelize.query(`CREATE DATABASE IF NOT EXISTS ${config.db.name};`);
-        await tempSequelize.close();
-        
-        logger.info(`Database ${config.db.name} created successfully`);
-        
-        // Now sync with the newly created database
-        await db.sequelize.sync({ force: false });
-        logger.info('Database tables created successfully');
-        
-        // Initialize database with default data
-        await initializeDatabase();
-        logger.info('Database initialized successfully');
-        
-        return true;
-      } catch (createError) {
-        logger.error('Failed to create database:', createError);
-        return false;
-      }
-    }
-    
-    // For other database errors, fail gracefully
-    if (config.env === 'production') {
-      logger.error('Database setup failed in production. Server will exit.');
-      return false;
-    } else {
-      logger.warn('Database setup failed, but continuing in development mode. Some features may not work properly.');
-      return true; // Allow server to start even with DB issues in dev
-    }
-  }
-};
-
-// Main server startup function
-const startServer = async () => {
-  let server;
+/**
+ * Log successful startup information
+ * @param {http.Server} server - HTTP server instance
+ */
+function logSuccessfulStartup(server) {
+  const addr = server.address();
+  const port = typeof addr === 'string' ? addr : addr.port;
   
-  try {
-    // Step 1: Setup directory structure
-    ensureDirectories();
-    
-    // Step 2: Initialize templates
-    initializeTemplates();
-    
-    // Step 3: Setup global error handlers
-    setupGlobalErrorHandlers();
-    
-    // Step 4: Setup database and schema
-    const dbSuccess = await setupDatabase();
-    
-    // Only continue starting services if database setup was successful
-    if (dbSuccess) {
-      // Step 5: Start background services
-      if (config.env !== 'test') {
-        startScheduledMessageProcessor();
-        logger.info('Scheduled message processor started');
-      }
-      
-      // Step 6: Start HTTP server
-      server = app.listen(config.port, () => {
-        logger.info(`Server started on port ${config.port} (${config.env})`);
-        logger.info(`API URL: ${config.apiUrl}`);
-        logger.info(`Frontend URL: ${config.frontendUrl}`);
-      });
-      
-      // Step 7: Setup server error handling
-      server.on('error', (err) => {
-        logger.error('Server error:', err);
-        
-        // Handle specific errors
-        if (err.code === 'EADDRINUSE') {
-          logger.error(`Port ${config.port} is already in use. Trying again with a different port.`);
-          setTimeout(() => {
-            server.close();
-            server.listen(0); // Let OS assign a random available port
-          }, 1000);
-        } else {
-          process.exit(1);
-        }
-      });
-      
-      // Step 8: Setup graceful shutdown
-      setupGracefulShutdown(server);
-    } else if (config.env === 'production') {
-      logger.error('Failed to set up database in production mode, exiting');
-      process.exit(1);
-    }
-  } catch (error) {
-    logger.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
+  logger.info('======================================================');
+  logger.info(`🚀 JayLink SMS Platform started successfully!`);
+  logger.info(`🌐 Environment: ${config.env}`);
+  logger.info(`🔌 Server port: ${port}`);
+  logger.info(`🌐 API URL: ${config.apiUrl}`);
+  logger.info(`🖥️ Frontend URL: ${config.frontendUrl}`);
+  logger.info(`💰 Currency: ${config.currency.name} (${config.currency.code})`);
+  logger.info('======================================================');
+}
+
+/**
+ * Graceful exit with a delay to allow logging to complete
+ * @param {number} code - Exit code
+ * @returns {Promise<void>}
+ */
+async function gracefulExit(code) {
+  // Allow time for logs to be written
+  await new Promise(resolve => setTimeout(resolve, 500));
+  process.exit(code);
+}
 
 // Start the server
-startServer();
+startServer().catch(err => {
+  logger.error('Failed to start server:', err);
+  process.exit(1);
+});

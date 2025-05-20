@@ -4,10 +4,16 @@ const db = require('../models');
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
 const config = require('../config/config');
+const emailService = require('./email.service');
+const Queue = require('../utils/queue.util');
 
 const User = db.User;
 const Notification = db.Notification;
 const Setting = db.Setting;
+const DeviceToken = db.DeviceToken;
+
+// Create push notification queue
+const pushQueue = new Queue('pushNotifications');
 
 /**
  * Create a notification for a user
@@ -16,9 +22,11 @@ const Setting = db.Setting;
  * @param {string} message - Notification message
  * @param {string} type - Notification type (info, success, warning, error)
  * @param {Object} metadata - Additional notification metadata
+ * @param {boolean} sendEmail - Whether to send an email notification
+ * @param {boolean} sendPush - Whether to send a push notification
  * @returns {Object} Created notification
  */
-const createNotification = async (userId, title, message, type = 'info', metadata = {}) => {
+const createNotification = async (userId, title, message, type = 'info', metadata = {}, sendEmail = false, sendPush = true) => {
   try {
     // Check if user exists
     const user = await User.findByPk(userId);
@@ -45,29 +53,48 @@ const createNotification = async (userId, title, message, type = 'info', metadat
       return null;
     }
     
-    // Create notification
+    // Determine push and email notification status based on user settings
+    const shouldSendPush = sendPush && 
+                          notificationSettings.pushNotifications !== false && 
+                          config.notifications.pushEnabled;
+                          
+    const shouldSendEmail = sendEmail && 
+                          notificationSettings.emailAlerts !== false;
+    
+    // Initial status for push and email
+    const pushStatus = shouldSendPush ? 'pending' : 'not_applicable';
+    const emailStatus = shouldSendEmail ? 'pending' : 'not_applicable';
+    
+    // Create notification record
     const notification = await Notification.create({
       userId,
       title,
       message,
       type,
-      metadata: metadata ? JSON.stringify(metadata) : null,
+      metadata,
       read: false,
+      pushStatus,
+      emailStatus
     });
     
-    // If push notifications are enabled, queue push notification
-    if (config.notifications.pushEnabled && 
-        notificationSettings.pushNotifications !== false) {
-      try {
-        // Queue push notification (implementation depends on your push service)
-        // This would typically be processed by a worker outside the request cycle
-        queuePushNotification(userId, title, message, type, notification.id).catch(
-          err => logger.error(`Failed to queue push notification: ${err.message}`)
-        );
-      } catch (error) {
-        logger.error(`Push notification error: ${error.message}`);
-        // Continue even if push notification fails
-      }
+    // Process push notification if needed
+    if (shouldSendPush) {
+      processPushNotification(userId, notification.id, title, message, type, metadata)
+        .catch(err => logger.error(`Push notification error: ${err.message}`, { 
+          userId, 
+          notificationId: notification.id,
+          error: err.message
+        }));
+    }
+    
+    // Process email notification if needed
+    if (shouldSendEmail) {
+      processEmailNotification(user, notification.id, title, message, type, metadata)
+        .catch(err => logger.error(`Email notification error: ${err.message}`, {
+          userId,
+          notificationId: notification.id,
+          error: err.message
+        }));
     }
     
     return notification;
@@ -80,6 +107,156 @@ const createNotification = async (userId, title, message, type = 'info', metadat
     });
     // Don't throw the error - notifications should be non-blocking
     return null;
+  }
+};
+
+/**
+ * Process push notification sending
+ * @private
+ */
+const processPushNotification = async (userId, notificationId, title, message, type, metadata) => {
+  try {
+    // Get active device tokens for the user
+    const deviceTokens = await DeviceToken.findAll({
+      where: {
+        userId,
+        active: true
+      }
+    });
+    
+    if (!deviceTokens || deviceTokens.length === 0) {
+      // No device tokens found, mark as not applicable
+      await Notification.update(
+        { pushStatus: 'not_applicable' },
+        { where: { id: notificationId } }
+      );
+      return;
+    }
+    
+    // Add to push notification queue
+    const result = await queuePushNotification(userId, notificationId, title, message, type, 
+      deviceTokens.map(dt => ({ token: dt.token, deviceType: dt.deviceType })),
+      metadata
+    );
+    
+    logger.debug(`Queued push notification for user ${userId}: ${notificationId}`, { result });
+    
+    return result;
+  } catch (error) {
+    logger.error(`Process push notification error: ${error.message}`, {
+      userId,
+      notificationId,
+      error: error.message
+    });
+    
+    // Mark push notification as failed
+    await Notification.update(
+      { pushStatus: 'failed' },
+      { where: { id: notificationId } }
+    );
+    
+    throw error;
+  }
+};
+
+/**
+ * Queue push notification for processing
+ * @private
+ */
+const queuePushNotification = async (userId, notificationId, title, message, type, deviceTokens, metadata) => {
+  try {
+    // Add to queue for processing
+    const job = await pushQueue.add('sendPushNotification', {
+      userId,
+      notificationId,
+      title,
+      message,
+      type,
+      deviceTokens,
+      metadata,
+      timestamp: new Date().toISOString()
+    }, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000 // 5 seconds initial delay, then exponential backoff
+      }
+    });
+    
+    return {
+      jobId: job.id,
+      queued: true
+    };
+  } catch (error) {
+    logger.error(`Queue push notification error: ${error.message}`, {
+      error: error.message,
+      userId,
+      notificationId
+    });
+    
+    // Mark push notification as failed
+    await Notification.update(
+      { pushStatus: 'failed' },
+      { where: { id: notificationId } }
+    );
+    
+    throw error;
+  }
+};
+
+/**
+ * Process email notification
+ * @private
+ */
+const processEmailNotification = async (user, notificationId, title, message, type, metadata) => {
+  try {
+    // Map notification types to email templates
+    const templateMap = {
+      info: 'notification',
+      success: 'notification-success',
+      warning: 'notification-warning',
+      error: 'notification-error'
+    };
+    
+    // Get email template based on notification type or fall back to default
+    const template = templateMap[type] || 'notification';
+    
+    // Send email
+    const emailResult = await emailService.sendTemplateEmail({
+      to: user.email,
+      subject: title,
+      template,
+      context: {
+        title,
+        firstName: user.firstName,
+        message,
+        metadata,
+        appUrl: config.frontendUrl,
+        type
+      }
+    });
+    
+    // Update notification email status
+    await Notification.update(
+      { emailStatus: emailResult ? 'sent' : 'failed' },
+      { where: { id: notificationId } }
+    );
+    
+    return emailResult;
+  } catch (error) {
+    logger.error(`Process email notification error: ${error.message}`, {
+      userId: user.id,
+      notificationId,
+      error: error.message
+    });
+    
+    // Mark email notification as failed
+    await Notification.update(
+      { emailStatus: 'failed' },
+      { where: { id: notificationId } }
+    );
+    
+    throw error;
   }
 };
 
@@ -112,7 +289,11 @@ const createBalanceNotification = async (userId, operation, amount, newBalance) 
     currency: config.currency.code
   };
   
-  return createNotification(userId, title, message, type, metadata);
+  // Send email for low balance alerts
+  const sendEmail = operation === 'deduct' && 
+                  newBalance < (config.systemDefaults.minimumBalanceThreshold || 500);
+  
+  return createNotification(userId, title, message, type, metadata, sendEmail);
 };
 
 /**
@@ -125,7 +306,8 @@ const createPasswordResetNotification = async (userId) => {
   const message = 'Your password has been reset. If you did not request this change, please contact support immediately.';
   const type = 'warning';
   
-  return createNotification(userId, title, message, type);
+  // Always send email for password resets for security
+  return createNotification(userId, title, message, type, {}, true);
 };
 
 /**
@@ -139,7 +321,8 @@ const createStatusChangeNotification = async (userId, status) => {
   const message = `Your account status has been changed to "${status}".`;
   const type = status === 'active' ? 'success' : (status === 'suspended' ? 'warning' : 'error');
   
-  return createNotification(userId, title, message, type, { status });
+  // Send email for status changes
+  return createNotification(userId, title, message, type, { status }, true);
 };
 
 /**
@@ -174,7 +357,7 @@ const createPaymentNotification = async (userId, amount, paymentMethod, referenc
  * @returns {Object} Created notification
  */
 const createMessageDeliveryNotification = async (userId, messageId, recipients, delivered, failed) => {
-  // Skip if all messages were delivered
+  // Skip if all messages were delivered successfully
   if (failed === 0) {
     return null;
   }
@@ -183,12 +366,16 @@ const createMessageDeliveryNotification = async (userId, messageId, recipients, 
   const message = `Your message (ID: ${messageId}) was sent to ${recipients} recipients. ${delivered} delivered, ${failed} failed.`;
   const type = failed > 0 ? 'warning' : 'success';
   
+  // Send email for failed messages if there are significant failures (over 10%)
+  const failureRate = failed / recipients;
+  const sendEmail = failureRate > 0.1;
+  
   return createNotification(userId, title, message, type, { 
     messageId, 
     recipients, 
     delivered, 
     failed 
-  });
+  }, sendEmail);
 };
 
 /**
@@ -235,20 +422,6 @@ const getUserNotifications = async (userId, options = {}) => {
       order: [['createdAt', 'DESC']],
     });
     
-    // Parse metadata JSON
-    const notifications = rows.map(notification => {
-      const notif = notification.toJSON();
-      try {
-        if (notif.metadata) {
-          notif.metadata = JSON.parse(notif.metadata);
-        }
-      } catch (error) {
-        logger.warn(`Failed to parse notification metadata for ID ${notif.id}`);
-        notif.metadata = {};
-      }
-      return notif;
-    });
-    
     // Calculate total pages
     const totalPages = Math.ceil(count / limit);
     
@@ -261,7 +434,7 @@ const getUserNotifications = async (userId, options = {}) => {
     });
     
     return {
-      notifications,
+      notifications: rows,
       pagination: {
         total: count,
         totalPages,
@@ -470,17 +643,7 @@ const getNotificationStats = async (userId = null) => {
         warning: typeCounts[2],
         error: typeCounts[3]
       },
-      recentNotifications: recentNotifications.map(notification => {
-        const notif = notification.toJSON();
-        try {
-          if (notif.metadata) {
-            notif.metadata = JSON.parse(notif.metadata);
-          }
-        } catch (error) {
-          notif.metadata = {};
-        }
-        return notif;
-      })
+      recentNotifications
     };
   } catch (error) {
     logger.error(`Get notification stats error: ${error.message}`, { 
@@ -492,33 +655,189 @@ const getNotificationStats = async (userId = null) => {
 };
 
 /**
- * Queue push notification for processing
- * @private
+ * Get user notification settings
+ * @param {number} userId - User ID
+ * @returns {Object} User notification settings
  */
-const queuePushNotification = async (userId, title, message, type, notificationId) => {
-  // This is a placeholder for your actual push notification implementation
-  // In a real app, this would typically:
-  // 1. Get user's FCM/APNS tokens from database
-  // 2. Format the notification payload for the respective platform
-  // 3. Queue the notification to be sent asynchronously
-  
-  logger.debug(`Queued push notification for user ${userId}: ${title}`);
-  
-  // Example implementation with a worker queue would be:
-  // return queue.add('sendPushNotification', {
-  //   userId,
-  //   title,
-  //   message,
-  //   type,
-  //   notificationId
-  // });
-  
-  // For now, we'll just return a resolved promise
-  return Promise.resolve({
-    queued: true,
-    userId,
-    notificationId
-  });
+const getUserSettings = async (userId) => {
+  try {
+    // Check if user exists
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+    
+    // Get settings
+    const userSettings = await Setting.findOne({
+      where: {
+        userId,
+        category: 'notifications'
+      }
+    });
+    
+    // Return settings or defaults
+    if (userSettings && userSettings.settings) {
+      return userSettings.settings;
+    }
+    
+    // Default notification settings
+    const defaultSettings = {
+      emailAlerts: true,
+      lowBalanceAlerts: true,
+      deliveryReports: true,
+      marketingEmails: false,
+      pushNotifications: true,
+      infoNotifications: true,
+      successNotifications: true,
+      warningNotifications: true,
+      errorNotifications: true
+    };
+    
+    return defaultSettings;
+  } catch (error) {
+    logger.error(`Get user notification settings error: ${error.message}`, {
+      stack: error.stack,
+      userId
+    });
+    throw error;
+  }
+};
+
+/**
+ * Update user notification settings
+ * @param {number} userId - User ID
+ * @param {Object} settings - Notification settings to update
+ * @returns {Object} Updated settings
+ */
+const updateNotificationSettings = async (userId, settings) => {
+  try {
+    // Check if user exists
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+    
+    // Get existing settings or create if doesn't exist
+    const [userSettings, created] = await Setting.findOrCreate({
+      where: { 
+        userId,
+        category: 'notifications'
+      },
+      defaults: {
+        userId,
+        category: 'notifications',
+        settings: {}
+      }
+    });
+    
+    // Update settings with new data
+    const currentSettings = userSettings.settings || {};
+    const updatedSettings = { ...currentSettings, ...settings };
+    
+    await userSettings.update({ settings: updatedSettings });
+    
+    return updatedSettings;
+  } catch (error) {
+    logger.error(`Update notification settings error: ${error.message}`, {
+      stack: error.stack,
+      userId,
+      settings: JSON.stringify(settings)
+    });
+    throw error;
+  }
+};
+
+/**
+ * Register a device token for push notifications
+ * @param {number} userId - User ID
+ * @param {string} token - FCM or similar push token
+ * @param {string} deviceType - Device type (android/ios/web/other)
+ * @param {Object} deviceInfo - Additional device info
+ * @returns {Object} Registered token
+ */
+const registerDeviceToken = async (userId, token, deviceType = 'web', deviceInfo = {}) => {
+  try {
+    // Check if user exists
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+    
+    // Check if token already exists for user
+    const existingToken = await DeviceToken.findOne({
+      where: {
+        userId,
+        token
+      }
+    });
+    
+    // Update existing token if found
+    if (existingToken) {
+      await existingToken.update({
+        deviceType,
+        deviceInfo,
+        active: true,
+        updatedAt: new Date()
+      });
+      
+      return existingToken;
+    }
+    
+    // Create new token
+    const deviceToken = await DeviceToken.create({
+      userId,
+      token,
+      deviceType,
+      deviceInfo,
+      active: true
+    });
+    
+    return deviceToken;
+  } catch (error) {
+    logger.error(`Register device token error: ${error.message}`, {
+      stack: error.stack,
+      userId,
+      deviceType
+    });
+    throw error;
+  }
+};
+
+/**
+ * Unregister a device token
+ * @param {number} userId - User ID
+ * @param {string} token - Device token to unregister
+ * @returns {Object} Result
+ */
+const unregisterDeviceToken = async (userId, token) => {
+  try {
+    // Find and update token
+    const result = await DeviceToken.update(
+      { active: false },
+      { 
+        where: { 
+          userId,
+          token
+        } 
+      }
+    );
+    
+    return {
+      success: true,
+      deactivated: result[0] > 0,
+      message: result[0] > 0 ? 'Device token unregistered' : 'Device token not found'
+    };
+  } catch (error) {
+    logger.error(`Unregister device token error: ${error.message}`, {
+      stack: error.stack,
+      userId,
+      token: token.substring(0, 10) + '...' // Log partial token for privacy
+    });
+    throw error;
+  }
 };
 
 module.exports = {
@@ -532,5 +851,9 @@ module.exports = {
   markAsRead,
   deleteNotifications,
   cleanupOldNotifications,
-  getNotificationStats
+  getNotificationStats,
+  updateNotificationSettings,
+  getUserSettings,
+  registerDeviceToken,
+  unregisterDeviceToken
 };

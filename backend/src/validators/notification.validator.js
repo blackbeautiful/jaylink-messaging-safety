@@ -47,7 +47,9 @@ const createTestNotificationSchema = Joi.object({
     .messages({
       'any.only': 'Type must be one of: info, success, warning, error'
     }),
-  metadata: Joi.object().default({})
+  metadata: Joi.object().default({}),
+  action: Joi.string(),
+  sendEmail: Joi.boolean().default(false)
 });
 
 // Get notifications validation schema

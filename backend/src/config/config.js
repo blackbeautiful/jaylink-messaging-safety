@@ -127,13 +127,31 @@ const config = {
     clientId: process.env.FIREBASE_CLIENT_ID,
     clientSecret: process.env.FIREBASE_CLIENT_SECRET,
   },
-
+  
   // Redis configuration for queue system
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT, 10) || 6379,
     password: process.env.REDIS_PASSWORD,
     tls: process.env.REDIS_TLS === 'true',
+    // Add these new retry and reconnect settings
+    maxRetriesPerRequest: parseInt(process.env.REDIS_MAX_RETRIES_PER_REQUEST, 10) || 3,
+    reconnectOnError: function (err) {
+      const targetError = 'READONLY';
+      if (err.message.includes(targetError)) {
+        // Only reconnect on specific errors
+        return true;
+      }
+    },
+    retryStrategy: function (times) {
+      if (times > 10) {
+        logger.error('Redis connection failed too many times. Giving up.');
+        return null; // Ends reconnecting after 10 attempts
+      }
+      return Math.min(times * 100, 3000); // Time between retries with exponential backoff
+    },
+    // Development fallback - enable mock mode if Redis is not available
+    enableMockInDev: process.env.REDIS_ENABLE_MOCK_IN_DEV === 'true' || true,
   },
 
   // System settings defaults

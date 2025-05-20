@@ -89,6 +89,21 @@ module.exports = {
     underscored: false,
   },
   logging: config.env === 'development' ? (msg) => logger.debug(msg) : false,
+  // Add these connection handling options
+  retry: {
+    match: [
+      /SequelizeConnectionError/,
+      /SequelizeConnectionRefusedError/,
+      /SequelizeHostNotFoundError/,
+      /SequelizeHostNotReachableError/,
+      /SequelizeInvalidConnectionError/,
+      /SequelizeConnectionTimedOutError/,
+      /Connection terminated unexpectedly/
+    ],
+    max: 5, // Maximum retry attempts
+    backoffBase: 1000, // Initial delay in ms
+    backoffExponent: 1.5 // Exponential backoff
+  }
 };
 
 // Log database connection config (without sensitive data)

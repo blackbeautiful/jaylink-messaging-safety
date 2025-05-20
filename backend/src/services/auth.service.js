@@ -6,6 +6,7 @@ const config = require('../config/config');
 const ApiError = require('../utils/api-error.util');
 const logger = require('../config/logger');
 const emailService = require('./email.service');
+const notificationService = require('./notification.service');
 
 const User = db.User;
 const UserSession = db.UserSession;
@@ -52,6 +53,19 @@ const register = async (userData) => {
     emailService.sendWelcomeEmail(user)
       .catch(err => logger.error(`Failed to send welcome email: ${err.message}`));
 
+    // Create welcome notification
+    notificationService.createNotification(
+      user.id,
+      'Welcome to JayLink',
+      'Thank you for joining JayLink SMS. Start sending messages right away!',
+      'info',
+      {
+        action: 'welcome',
+        timestamp: new Date().toISOString()
+      },
+      false // Don't send email since we already sent welcome email
+    ).catch(err => logger.error(`Failed to create welcome notification: ${err.message}`));
+
     return {
       user: userResponse,
       token,
@@ -97,6 +111,20 @@ const login = async (email, password) => {
     // Return user and token (exclude password)
     const userResponse = user.toJSON();
     delete userResponse.password;
+
+    // Create login notification
+    notificationService.createNotification(
+      user.id,
+      'New Login',
+      'You have successfully logged in to your account.',
+      'info',
+      {
+        action: 'login',
+        timestamp: new Date().toISOString(),
+        ipAddress: '127.0.0.1' // In a real app, get from request
+      },
+      false // Don't send email for routine logins
+    ).catch(err => logger.error(`Failed to create login notification: ${err.message}`));
 
     return {
       user: userResponse,
@@ -147,6 +175,20 @@ const adminLogin = async (username, password) => {
     // Return admin and token (exclude password)
     const adminResponse = admin.toJSON();
     delete adminResponse.password;
+
+    // Create admin login notification
+    notificationService.createNotification(
+      admin.id,
+      'Admin Login',
+      'You have successfully logged in to your admin account.',
+      'info',
+      {
+        action: 'admin-login',
+        timestamp: new Date().toISOString(),
+        ipAddress: '127.0.0.1' // In a real app, get from request
+      },
+      false // Don't send email for routine logins
+    ).catch(err => logger.error(`Failed to create admin login notification: ${err.message}`));
 
     return {
       admin: adminResponse,
@@ -212,6 +254,19 @@ const forgotPassword = async (email) => {
     // Send password reset email
     await emailService.sendPasswordResetEmail(user, resetToken);
 
+    // Create notification
+    notificationService.createNotification(
+      user.id,
+      'Password Reset Requested',
+      'A password reset request was initiated for your account. If you did not request this, please contact support.',
+      'warning',
+      {
+        action: 'password-reset-request',
+        timestamp: new Date().toISOString()
+      },
+      false // Don't send email since we already sent reset email
+    ).catch(err => logger.error(`Failed to create password reset notification: ${err.message}`));
+
     // For development, also log the token
     if (config.env === 'development') {
       logger.info(`Reset token for ${email}: ${resetToken}`);
@@ -268,6 +323,20 @@ const resetPassword = async (token, password) => {
     emailService.sendPasswordChangedEmail(user)
       .catch(err => logger.error(`Failed to send password change email: ${err.message}`));
 
+    // Create notification for password reset
+    notificationService.createNotification(
+      user.id,
+      'Password Reset Complete',
+      'Your password has been reset successfully. If you did not make this change, please contact support immediately.',
+      'warning',
+      {
+        action: 'password-reset-complete',
+        timestamp: new Date().toISOString(),
+        ipAddress: '127.0.0.1' // In a real app, get from request
+      },
+      false // Don't send email since we already sent changed email
+    ).catch(err => logger.error(`Failed to create password reset notification: ${err.message}`));
+
     return true;
   } catch (error) {
     logger.error(`Reset password error: ${error.message}`);
@@ -307,6 +376,20 @@ const changePassword = async (userId, currentPassword, newPassword) => {
     // Send password change confirmation email
     emailService.sendPasswordChangedEmail(user)
       .catch(err => logger.error(`Failed to send password change email: ${err.message}`));
+
+    // Create notification for password change
+    notificationService.createNotification(
+      userId,
+      'Password Changed', 
+      'Your account password was changed successfully. If you did not make this change, please contact support immediately.',
+      'warning',
+      {
+        action: 'password-changed',
+        timestamp: new Date().toISOString(),
+        ipAddress: '127.0.0.1' // In a real app, would get from request
+      },
+      false // Don't send another email since we already sent one
+    ).catch(err => logger.error(`Failed to create password change notification: ${err.message}`));
 
     return true;
   } catch (error) {

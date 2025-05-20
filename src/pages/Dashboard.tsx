@@ -1,3 +1,4 @@
+// src/pages/Dashboard.jsx 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
@@ -30,12 +31,19 @@ const Dashboard = () => {
       // Fetch recent messages
       const messagesResponse = await api.get('/sms/history?limit=5');
       
+      // Fetch user balance
+      const balanceResponse = await api.get('/balance');
+      
       if (analyticsResponse.data.success) {
         setAnalytics(analyticsResponse.data.data);
       }
       
       if (messagesResponse.data.success) {
         setRecentMessages(messagesResponse.data.data.messages);
+      }
+      
+      if (balanceResponse.data.success) {
+        setBalance(balanceResponse.data.data);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -62,9 +70,10 @@ const Dashboard = () => {
         {/* Dashboard Stats */}
         <section>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Overview</h2>
-          <DashboardStats analytics={analytics} loading={loading} />
+          <DashboardStats analytics={analytics} balance={balance} loading={loading} />
         </section>
         
+        {/* Rest of the component remains the same */}
         {/* Quick Actions */}
         <section>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Quick Actions</h2>

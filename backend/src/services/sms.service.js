@@ -6,9 +6,11 @@ const ApiError = require('../utils/api-error.util');
 const logger = require('../config/logger');
 const smsProviderService = require('./sms-provider.service');
 const balanceService = require('./balance.service');
+const notificationService = require('./notification.service');
 const csvUtil = require('../utils/csv.util');
 const { generateUniqueId } = require('../utils/id.util');
 const { parsePhoneNumbers } = require('../utils/phone.util');
+const config = require('../config/config');
 
 const Message = db.Message;
 const ScheduledMessage = db.ScheduledMessage;
@@ -84,6 +86,22 @@ const sendSMS = async (userId, messageData) => {
         status: 'pending',
       });
       
+      // Create notification for scheduled message
+      notificationService.createNotification(
+        userId,
+        'Message Scheduled',
+        `Your message to ${phoneNumbers.length} recipient(s) has been scheduled for ${scheduledAt.toLocaleString()}.`,
+        'info',
+        {
+          action: 'message-scheduled',
+          messageId: `scheduled_${scheduledMessage.id}`,
+          recipientCount: phoneNumbers.length,
+          scheduledAt: scheduledAt.toISOString(),
+          recipientType
+        },
+        false // Don't send email for routine operations
+      ).catch(err => logger.error(`Failed to create scheduled message notification: ${err.message}`));
+      
       return {
         messageId: `scheduled_${scheduledMessage.id}`,
         status: 'scheduled',
@@ -116,6 +134,23 @@ const sendSMS = async (userId, messageData) => {
       status: 'sent',
       scheduled: false,
     });
+    
+    // Create notification for sent message
+    notificationService.createNotification(
+      userId,
+      'Message Sent Successfully',
+      `Your message has been sent to ${phoneNumbers.length} recipient(s).`,
+      'success',
+      {
+        action: 'message-sent',
+        messageId: messageRecord.messageId,
+        recipientCount: phoneNumbers.length,
+        cost: cost,
+        recipientType,
+        timestamp: new Date().toISOString()
+      },
+      false // Don't send email for routine operations
+    ).catch(err => logger.error(`Failed to create message sent notification: ${err.message}`));
     
     return {
       messageId: messageRecord.messageId,
@@ -191,6 +226,21 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
         status: 'pending',
       });
       
+      // Create notification for scheduled bulk message
+      notificationService.createNotification(
+        userId,
+        'Bulk SMS Scheduled',
+        `Your bulk SMS to ${phoneNumbers.length} recipient(s) has been scheduled for ${scheduledAt.toLocaleString()}.`,
+        'info',
+        {
+          action: 'bulk-message-scheduled',
+          messageId: `scheduled_${scheduledMessage.id}`,
+          recipientCount: phoneNumbers.length,
+          scheduledAt: scheduledAt.toISOString()
+        },
+        false // Don't send email for routine operations
+      ).catch(err => logger.error(`Failed to create scheduled bulk message notification: ${err.message}`));
+      
       return {
         messageId: `scheduled_${scheduledMessage.id}`,
         status: 'scheduled',
@@ -244,6 +294,27 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
     } catch (error) {
       logger.warn(`Failed to delete CSV file: ${error.message}`);
     }
+    
+    // Create campaign completion notification
+    const notificationTitle = failedCount > 0 ? 'Bulk SMS Campaign Completed with Issues' : 'Bulk SMS Campaign Completed';
+    const notificationType = failedCount > (phoneNumbers.length * 0.1) ? 'warning' : 'success'; // Warning if >10% failed
+    
+    notificationService.createNotification(
+      userId,
+      notificationTitle,
+      `Your bulk SMS campaign to ${phoneNumbers.length} recipients has completed with ${sentCount} delivered and ${failedCount} failed messages.`,
+      notificationType,
+      {
+        action: 'campaign-complete',
+        campaignId: messageRecord.messageId,
+        total: phoneNumbers.length,
+        delivered: sentCount,
+        failed: failedCount,
+        cost: cost,
+        timestamp: new Date().toISOString()
+      },
+      failedCount > (phoneNumbers.length * 0.1) // Send email only if more than 10% failed
+    ).catch(err => logger.error(`Failed to create campaign completion notification: ${err.message}`));
     
     return {
       messageId: messageRecord.messageId,
@@ -313,6 +384,27 @@ const getMessageStatus = async (userId, messageId) => {
         // Update message status if it has changed
         if (providerStatus.status !== message.status) {
           await message.update({ status: providerStatus.status });
+          
+          // If status changed to delivered or failed, create notification
+          if (providerStatus.status === 'delivered' || providerStatus.status === 'failed') {
+            const notificationType = providerStatus.status === 'delivered' ? 'success' : 'warning';
+            const notificationTitle = providerStatus.status === 'delivered' ? 'Message Delivered' : 'Message Delivery Failed';
+            
+            notificationService.createNotification(
+              userId,
+              notificationTitle,
+              `Your message to ${message.recipientCount} recipient(s) has been ${providerStatus.status}.`,
+              notificationType,
+              {
+                action: 'message-status-update',
+                messageId: message.messageId,
+                previousStatus: message.status,
+                newStatus: providerStatus.status,
+                timestamp: new Date().toISOString()
+              },
+              providerStatus.status === 'failed' // Send email only for failed messages
+            ).catch(err => logger.error(`Failed to create message status notification: ${err.message}`));
+          }
         }
         
         return {
@@ -399,7 +491,7 @@ const getMessageHistory = async (userId, options = {}) => {
     const { count, rows } = await Message.findAndCountAll({
       where: whereConditions,
       order: [['createdAt', 'DESC']],
-      limit,
+      limit: parseInt(limit, 10),
       offset,
     });
     
@@ -423,8 +515,8 @@ const getMessageHistory = async (userId, options = {}) => {
       pagination: {
         total: count,
         totalPages,
-        currentPage: page,
-        limit,
+        currentPage: parseInt(page, 10),
+        limit: parseInt(limit, 10),
         hasNext: page < totalPages,
         hasPrev: page > 1,
       },
@@ -466,7 +558,7 @@ const getScheduledMessages = async (userId, options = {}) => {
     const { count, rows } = await ScheduledMessage.findAndCountAll({
       where: whereConditions,
       order: [['scheduledAt', 'ASC']],
-      limit,
+      limit: parseInt(limit, 10),
       offset,
     });
     
@@ -490,8 +582,8 @@ const getScheduledMessages = async (userId, options = {}) => {
       pagination: {
         total: count,
         totalPages,
-        currentPage: page,
-        limit,
+        currentPage: parseInt(page, 10),
+        limit: parseInt(limit, 10),
         hasNext: page < totalPages,
         hasPrev: page > 1,
       },
@@ -529,6 +621,22 @@ const cancelScheduledMessage = async (userId, scheduledId) => {
     
     // Update status to cancelled
     await scheduledMessage.update({ status: 'cancelled' });
+    
+    // Create notification for cancelled scheduled message
+    notificationService.createNotification(
+      userId,
+      'Scheduled Message Cancelled',
+      `Your scheduled message to ${scheduledMessage.recipientCount} recipient(s) has been cancelled.`,
+      'info',
+      {
+        action: 'scheduled-message-cancelled',
+        scheduleId: scheduledId,
+        recipientCount: scheduledMessage.recipientCount,
+        scheduledAt: scheduledMessage.scheduledAt.toISOString(),
+        timestamp: new Date().toISOString()
+      },
+      false // Don't send email for routine operations
+    ).catch(err => logger.error(`Failed to create cancelled message notification: ${err.message}`));
     
     return true;
   } catch (error) {
@@ -867,6 +975,23 @@ const processScheduledMessages = async () => {
         // Update scheduled message as sent
         await scheduledMessage.update({ status: 'sent' });
         
+        // Create notification for processed scheduled message
+        notificationService.createNotification(
+          user.id,
+          'Scheduled Message Sent',
+          `Your scheduled message to ${phoneNumbers.length} recipient(s) has been sent.`,
+          'success',
+          {
+            action: 'scheduled-message-sent',
+            messageId: messageId,
+            originalScheduleId: scheduledMessage.id,
+            recipientCount: phoneNumbers.length,
+            cost: cost,
+            timestamp: new Date().toISOString()
+          },
+          false // Don't send email for routine operations
+        ).catch(err => logger.error(`Failed to create scheduled message notification: ${err.message}`));
+        
         successCount++;
       } catch (error) {
         logger.error(`Failed to process scheduled message ${scheduledMessage.id}: ${error.message}`);
@@ -876,6 +1001,22 @@ const processScheduledMessages = async () => {
           status: 'failed',
           errorMessage: error.message
         });
+        
+        // Create notification for failed scheduled message
+        notificationService.createNotification(
+          scheduledMessage.userId,
+          'Scheduled Message Failed',
+          `Your scheduled message could not be sent: ${error.message}`,
+          'error',
+          {
+            action: 'scheduled-message-failed',
+            scheduleId: scheduledMessage.id,
+            recipientCount: scheduledMessage.recipientCount,
+            error: error.message,
+            timestamp: new Date().toISOString()
+          },
+          true // Send email for failures
+        ).catch(err => logger.error(`Failed to create failed scheduled message notification: ${err.message}`));
         
         failedCount++;
       }

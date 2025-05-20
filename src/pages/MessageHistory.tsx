@@ -63,8 +63,8 @@ const MessageHistory = () => {
   });
   
   const [filters, setFilters] = useState({
-    type: "",
-    status: "",
+    type: "all",
+    status: "all",
     startDate: "",
     endDate: "",
   });
@@ -81,11 +81,11 @@ const MessageHistory = () => {
       // Build query parameters
       let queryParams = `?page=${page}&limit=${pagination.limit}`;
       
-      if (filters.type) {
+      if (filters.type && filters.type !== "all") {
         queryParams += `&type=${filters.type}`;
       }
       
-      if (filters.status) {
+      if (filters.status && filters.status !== "all") {
         queryParams += `&status=${filters.status}`;
       }
       
@@ -126,8 +126,8 @@ const MessageHistory = () => {
 
   const resetFilters = () => {
     setFilters({
-      type: "",
-      status: "",
+      type: "all",
+      status: "all",
       startDate: "",
       endDate: "",
     });
@@ -217,7 +217,7 @@ const MessageHistory = () => {
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Types</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="sms">SMS</SelectItem>
                     <SelectItem value="voice">Voice</SelectItem>
                     <SelectItem value="audio">Audio</SelectItem>
@@ -235,7 +235,7 @@ const MessageHistory = () => {
                     <SelectValue placeholder="All Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Status</SelectItem>
+                    <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="delivered">Delivered</SelectItem>
                     <SelectItem value="sent">Sent</SelectItem>
                     <SelectItem value="queued">Queued</SelectItem>
@@ -325,7 +325,7 @@ const MessageHistory = () => {
                             <span className="ml-2 capitalize">{message.status}</span>
                           </div>
                         </TableCell>
-                        <TableCell>${message.cost.toFixed(2)}</TableCell>
+                        <TableCell>${typeof message.cost === 'number' ? message.cost.toFixed(2) : '0.00'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { motion } from "framer-motion";
 import { 
   MessageSquare, 
@@ -70,10 +71,11 @@ const StatCard = ({ title, value, icon, change, delay = 0 }: StatCardProps) => {
 
 interface DashboardStatsProps {
   analytics: any;
+  balance: any;
   loading: boolean;
 }
 
-const DashboardStats = ({ analytics, loading }: DashboardStatsProps) => {
+const DashboardStats = ({ analytics, balance, loading }: DashboardStatsProps) => {
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -89,11 +91,14 @@ const DashboardStats = ({ analytics, loading }: DashboardStatsProps) => {
     );
   }
   
-  // Default values in case analytics isn't loaded yet
+  // Use actual values from props
   const totalMessages = analytics?.totalCount || 0;
   const deliveryRate = analytics?.deliveryRate || 0;
   const voiceCallCount = analytics?.types?.voice || 0;
-  const balance = 0; // This would come from a different API call
+  
+  // Use actual balance from balance API response
+  const userBalance = balance?.balance || 0;
+  const currencySymbol = balance?.currencySymbol || '₦';
   
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -117,7 +122,7 @@ const DashboardStats = ({ analytics, loading }: DashboardStatsProps) => {
       />
       <StatCard
         title="Balance"
-        value={`₦${balance.toFixed(2)}`}
+        value={`${currencySymbol}${userBalance.toFixed(2)}`}
         icon={<Wallet size={20} />}
         delay={3}
       />

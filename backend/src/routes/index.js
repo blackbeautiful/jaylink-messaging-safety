@@ -37,7 +37,7 @@ const authLimiter = rateLimit({
 // SMS rate limiter
 const smsLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 50, // 50 requests per minute
+  max: 100, // 100 requests per minute
   standardHeaders: true,
   legacyHeaders: false,
   message: {

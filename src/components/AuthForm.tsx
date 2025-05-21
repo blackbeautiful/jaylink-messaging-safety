@@ -117,7 +117,7 @@ const AuthForm = ({ type, redirectPath = '/dashboard' }: AuthFormProps) => {
     } catch (error: any) {
       setError(error.response?.data?.message || 'Invalid email or password. Please try again.');
       
-      toast.error(error.response?.data?.message || 'Invalid email or password. Please try again.');
+      // toast.error(error.response?.data?.message || 'Invalid email or password. Please try again.');
     } finally {
       setIsLoading(false);
     }

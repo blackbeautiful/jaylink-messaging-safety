@@ -72,8 +72,8 @@ app.use(compression());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: config.security.rateLimitWindowMs || 15 * 60 * 1000, // 15 minutes
-  max: config.security.rateLimitMax || 100, // 100 requests per window
+  windowMs: config.security.rateLimitWindowMs || 5 * 60 * 1000, // 15 minutes
+  max: config.security.rateLimitMax || 200, // 200 requests per window
   standardHeaders: true,
   legacyHeaders: false,
   message: {

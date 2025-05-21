@@ -21,6 +21,8 @@ write
 .env.mvp
 .env.example
 
+backups/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

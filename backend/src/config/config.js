@@ -166,8 +166,8 @@ const config = {
 
   // Security configuration
   security: {
-    rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000, // 15 minutes
-    rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX, 10) || 100, // 100 requests per window
+    rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 300000, // 5 minutes
+    rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX, 10) || 200, // 200 requests per window
     corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:8080',
     csrfProtection: process.env.CSRF_PROTECTION === 'true' || process.env.NODE_ENV === 'production',
     maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS, 10) || 5,

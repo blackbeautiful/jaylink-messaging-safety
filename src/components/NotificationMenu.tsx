@@ -1,3 +1,4 @@
+// src/components/NotificationMenu.tsx
 // Mock notifications for development (if API fails)
 const getMockNotifications = (): Notification[] => {
   return [
@@ -175,7 +176,7 @@ const fetchNotifications = useCallback(async (page = 1) => {
   try {
     setLoading(true);
     
-    const response = await api.get(`/notifications?page=${page}&limit=${pagination.limit}`);
+    const response = await api.get(`/notifications?page=${page}&limit=5`);
     
     if (response.data.success) {
       setNotifications(response.data.data.notifications);
@@ -193,21 +194,21 @@ const fetchNotifications = useCallback(async (page = 1) => {
       
       setNotifications(mockNotifications);
       setUnreadCount(mockNotifications.filter(n => !n.read).length);
-      setPagination({
-        ...pagination,
+      setPagination(prevPagination => ({
+        ...prevPagination,
         total: mockNotifications.length,
         totalPages: 1,
         currentPage: 1,
         hasNext: false,
         hasPrev: false,
-      });
+      }));
     } else {
       toast.error("Failed to load notifications");
     }
   } finally {
     setLoading(false);
   }
-}, [pagination.limit]);
+}, []);
 
 // Mark notification as read
 const markAsRead = async (id: string) => {

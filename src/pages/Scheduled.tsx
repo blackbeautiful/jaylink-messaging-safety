@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -26,14 +27,53 @@ import {
 import { toast } from 'sonner';
 import { Calendar, Clock, Trash2, Search, Loader2 } from 'lucide-react';
 import { api } from '@/contexts/AuthContext';
+import { useDebounce } from '@/hooks/use-debounce';
+
+type MessageType = 'sms' | 'voice' | 'audio' | 'all';
+type MessageStatus = 'pending' | 'processing' | 'sent' | 'cancelled' | 'failed';
+
+interface ScheduledMessage {
+  id: string;
+  userId: string;
+  type: 'sms' | 'voice' | 'audio';
+  message: string;
+  senderId: string;
+  recipients: string | string[];
+  recipientCount: number;
+  scheduledAt: string;
+  status: MessageStatus;
+  audioUrl?: string;
+  errorMessage?: string;
+}
+
+interface Pagination {
+  total: number;
+  totalPages: number;
+  currentPage: number;
+  limit: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  data: T;
+}
+
+interface ScheduledMessagesResponse {
+  messages: ScheduledMessage[];
+  pagination: Pagination;
+}
 
 const Scheduled = () => {
   const location = useLocation();
-  const [loading, setLoading] = useState(true);
-  const [scheduledMessages, setScheduledMessages] = useState([]);
-  const [messageType, setMessageType] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [pagination, setPagination] = useState({
+  const [loading, setLoading] = useState<boolean>(true);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
+  const [messageType, setMessageType] = useState<MessageType>('all');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  const [pagination, setPagination] = useState<Pagination>({
     total: 0,
     totalPages: 0,
     currentPage: 1,
@@ -41,110 +81,134 @@ const Scheduled = () => {
     hasNext: false,
     hasPrev: false,
   });
-  const [cancelingId, setCancelingId] = useState(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    fetchScheduledMessages();
-  }, [messageType]);
-
-  const fetchScheduledMessages = async (page = 1) => {
+  const fetchScheduledMessages = useCallback(async (page: number = 1, limit: number = pagination.limit) => {
     try {
-      setLoading(true);
+      setLoading(page === 1);
+      setIsRefreshing(page !== 1);
       
-      let queryParams = `?page=${page}&limit=${pagination.limit}`;
+      let queryParams = `?page=${page}&limit=${limit}`;
       
-      if (messageType) {
+      if (messageType && messageType !== 'all') {
         queryParams += `&type=${messageType}`;
       }
       
-      const response = await api.get(`/scheduled${queryParams}`);
+      if (debouncedSearchTerm) {
+        queryParams += `&search=${encodeURIComponent(debouncedSearchTerm)}`;
+      }
+      
+      const response = await api.get<ApiResponse<ScheduledMessagesResponse>>(`/scheduled${queryParams}`);
       
       if (response.data.success) {
         setScheduledMessages(response.data.data.messages || []);
         setPagination(response.data.data.pagination || {
           total: 0,
           totalPages: 0,
-          currentPage: 1,
-          limit: 10,
+          currentPage: page,
+          limit,
           hasNext: false,
           hasPrev: false,
         });
       } else {
-        toast.error('Failed to load scheduled messages');
+        toast.error(response.data.message || 'Failed to load scheduled messages');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching scheduled messages:', error);
-      toast.error('Failed to load scheduled messages. Please try again later.');
+      toast.error(error.response?.data?.message || 'Failed to load scheduled messages. Please try again later.');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [messageType, debouncedSearchTerm, pagination.limit]);
 
-  const handleCancel = async (id) => {
+  // Initial fetch and when filters change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    fetchScheduledMessages(1);
+  }, [messageType, debouncedSearchTerm, fetchScheduledMessages]);
+
+  const handleCancel = async (id: string) => {
     try {
       setCancelingId(id);
       
-      const response = await api.delete(`/scheduled/${id}`);
+      const response = await api.delete<ApiResponse<{ success: boolean }>>(`/scheduled/${id}`);
       
       if (response.data.success) {
         toast.success('Scheduled message cancelled successfully');
-        // Remove the cancelled message from the list
-        setScheduledMessages(scheduledMessages.filter(message => message.id !== id));
+        // Optimistically update UI
+        setScheduledMessages(prev => prev.filter(msg => msg.id !== id));
+        setPagination(prev => ({
+          ...prev,
+          total: prev.total - 1,
+          totalPages: Math.ceil((prev.total - 1) / prev.limit)
+        }));
       } else {
-        toast.error('Failed to cancel the scheduled message');
+        toast.error(response.data.message || 'Failed to cancel the scheduled message');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error cancelling scheduled message:', error);
-      toast.error('Failed to cancel the scheduled message. Please try again later.');
+      toast.error(error.response?.data?.message || 'Failed to cancel the scheduled message. Please try again later.');
     } finally {
       setCancelingId(null);
     }
   };
 
-  const handleSearchChange = (e) => {
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   };
 
-  // Client-side filtering for search (the backend doesn't support search for scheduled messages)
-  const filteredMessages = searchTerm 
-    ? scheduledMessages.filter(msg => 
-        (msg.message?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (msg.recipients?.some && msg.recipients.some(r => r.toLowerCase().includes(searchTerm.toLowerCase()))))
-    : scheduledMessages;
+  const handlePageChange = (newPage: number) => {
+    if (newPage !== pagination.currentPage) {
+      fetchScheduledMessages(newPage);
+    }
+  };
 
-  // Format date nicely
-  const formatDate = (dateString) => {
+  const handleRefresh = () => {
+    fetchScheduledMessages(pagination.currentPage);
+  };
+
+  const formatDate = (dateString: string): string => {
     try {
-      return new Date(dateString).toLocaleString();
+      const options: Intl.DateTimeFormatOptions = { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      };
+      return new Date(dateString).toLocaleString('en-US', options);
     } catch (e) {
       return dateString;
     }
   };
 
-  // Check if scheduled time is in the past
-  const isScheduledInPast = (scheduledAt) => {
+  const isScheduledInPast = (scheduledAt: string): boolean => {
     return new Date(scheduledAt) < new Date();
   };
 
-  // Get recipients display text
-  const getRecipientsText = (recipients) => {
+  const getRecipientsText = (recipients: string | string[]): string => {
     try {
       if (!recipients) return 'No recipients';
       
+      let recipientArray: string[];
+      
       if (typeof recipients === 'string') {
         try {
-          recipients = JSON.parse(recipients);
+          recipientArray = JSON.parse(recipients) as string[];
         } catch (e) {
-          return recipients; // Return as is if not JSON
+          return recipients;
         }
+      } else {
+        recipientArray = recipients;
       }
       
-      if (!Array.isArray(recipients)) return 'Unknown format';
+      if (!Array.isArray(recipientArray)) return 'Unknown format';
       
-      if (recipients.length === 0) return 'No recipients';
-      if (recipients.length === 1) return recipients[0];
-      return `${recipients[0]} +${recipients.length - 1} more`;
+      if (recipientArray.length === 0) return 'No recipients';
+      if (recipientArray.length === 1) return recipientArray[0];
+      return `${recipientArray[0]} +${recipientArray.length - 1} more`;
     } catch (e) {
       return 'Error parsing recipients';
     }
@@ -178,36 +242,55 @@ const Scheduled = () => {
                 />
               </div>
             </div>
-            <div className="w-full md:w-auto">
-              <Select value={messageType} onValueChange={setMessageType}>
+            <div className="flex items-center gap-2">
+              <Select value={messageType} onValueChange={(value: MessageType) => setMessageType(value)}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Filter by type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Types</SelectItem>
+                  <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="sms">SMS Messages</SelectItem>
                   <SelectItem value="voice">Voice Calls</SelectItem>
                   <SelectItem value="audio">Audio Messages</SelectItem>
                 </SelectContent>
               </Select>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <span>Refresh</span>
+                )}
+              </Button>
             </div>
           </div>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle>Upcoming Scheduled Messages</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>Upcoming Scheduled Messages</CardTitle>
+                {pagination.total > 0 && (
+                  <span className="text-sm text-gray-500">
+                    Showing {scheduledMessages.length} of {pagination.total}
+                  </span>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="flex justify-center p-8">
                   <Loader2 className="animate-spin h-8 w-8 text-jaylink-600" />
                 </div>
-              ) : filteredMessages.length > 0 ? (
+              ) : scheduledMessages.length > 0 ? (
                 <div className="space-y-4">
-                  {filteredMessages.map((message) => (
+                  {scheduledMessages.map((message) => (
                     <div
                       key={message.id}
-                      className="p-4 border rounded-lg bg-white dark:bg-gray-800 shadow-sm"
+                      className="p-4 border rounded-lg bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
                     >
                       <div className="flex flex-col md:flex-row justify-between mb-3">
                         <div className="flex items-center mb-2 md:mb-0">
@@ -248,6 +331,14 @@ const Scheduled = () => {
                           ) : (
                             message.message
                           )}
+                        </p>
+                      </div>
+                      <div className="mb-3">
+                        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Recipients:
+                        </h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {getRecipientsText(message.recipients)}
                         </p>
                       </div>
                       <div className="flex flex-col sm:flex-row justify-between gap-2">
@@ -309,36 +400,26 @@ const Scheduled = () => {
                 </div>
               )}
               
-              {/* Pagination if needed */}
+              {/* Pagination */}
               {pagination.totalPages > 1 && (
                 <div className="flex justify-center mt-6">
-                  <div className="flex space-x-2">
+                  <div className="flex items-center space-x-2">
                     <Button 
                       variant="outline" 
                       size="sm"
-                      disabled={!pagination.hasPrev}
-                      onClick={() => fetchScheduledMessages(pagination.currentPage - 1)}
+                      disabled={!pagination.hasPrev || loading}
+                      onClick={() => handlePageChange(pagination.currentPage - 1)}
                     >
                       Previous
                     </Button>
-                    <div className="flex items-center space-x-1">
-                      {[...Array(pagination.totalPages)].map((_, i) => (
-                        <Button
-                          key={i}
-                          variant={pagination.currentPage === i + 1 ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => fetchScheduledMessages(i + 1)}
-                          className="w-8 h-8 p-0"
-                        >
-                          {i + 1}
-                        </Button>
-                      ))}
+                    <div className="flex items-center text-sm text-gray-500">
+                      Page {pagination.currentPage} of {pagination.totalPages}
                     </div>
                     <Button 
                       variant="outline" 
                       size="sm"
-                      disabled={!pagination.hasNext}
-                      onClick={() => fetchScheduledMessages(pagination.currentPage + 1)}
+                      disabled={!pagination.hasNext || loading}
+                      onClick={() => handlePageChange(pagination.currentPage + 1)}
                     >
                       Next
                     </Button>

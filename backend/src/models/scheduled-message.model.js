@@ -50,6 +50,10 @@ module.exports = (sequelize, DataTypes) => {
       scheduledAt: {
         type: DataTypes.DATE,
         allowNull: false,
+        get() {
+          const rawValue = this.getDataValue('scheduledAt');
+          return rawValue instanceof Date ? rawValue : new Date(rawValue);
+        }
       },
       status: {
         type: DataTypes.ENUM('pending', 'processing', 'sent', 'cancelled', 'failed'),

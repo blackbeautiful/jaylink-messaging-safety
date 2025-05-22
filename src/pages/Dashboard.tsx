@@ -8,6 +8,7 @@ import DashboardStats from '@/components/DashboardStats';
 import MessageForm from '@/components/MessageForm';
 import { api } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
+import MessageDetailDialog from '@/components/messages/MessageDetailDialog';
 
 const Dashboard = () => {
   const location = useLocation();
@@ -15,6 +16,9 @@ const Dashboard = () => {
   const [analytics, setAnalytics] = useState(null);
   const [balance, setBalance] = useState(null);
   const [recentMessages, setRecentMessages] = useState([]);
+  
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -63,6 +67,11 @@ const Dashboard = () => {
       minute: '2-digit'
     });
   };
+  
+  const handleViewMessage = (message) => {
+    setSelectedMessage(message);
+    setIsDetailOpen(true);
+  };
 
   return (
     <DashboardLayout title="Dashboard" currentPath={location.pathname}>
@@ -73,7 +82,6 @@ const Dashboard = () => {
           <DashboardStats analytics={analytics} balance={balance} loading={loading} />
         </section>
         
-        {/* Rest of the component remains the same */}
         {/* Quick Actions */}
         <section>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
@@ -111,11 +119,12 @@ const Dashboard = () => {
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Status
                       </th>
+                      <th className="px-3 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {recentMessages.map((message) => (
-                      <tr key={message.id}>
+                      <tr key={message.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" onClick={() => handleViewMessage(message)}>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {formatDate(message.createdAt)}
                         </td>
@@ -152,6 +161,18 @@ const Dashboard = () => {
                             {message.status.charAt(0).toUpperCase() + message.status.slice(1)}
                           </span>
                         </td>
+                        <td className="px-3 py-4 whitespace-nowrap text-sm text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewMessage(message);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -176,6 +197,13 @@ const Dashboard = () => {
           </motion.div>
         </section>
       </div>
+      
+      {/* Message details dialog */}
+      <MessageDetailDialog
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        message={selectedMessage}
+      />
     </DashboardLayout>
   );
 };

@@ -1,3 +1,4 @@
+// src/components/groups/GroupList.tsx
 import { Button } from "@/components/ui/button";
 import { Edit, Trash2, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";

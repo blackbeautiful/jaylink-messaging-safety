@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,174 +21,292 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Loader2, Send, Calendar, UsersRound, FileText } from "lucide-react";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { 
+  Loader2, 
+  Send, 
+  Calendar, 
+  FileText, 
+  X, 
+  AlertCircle,
+  DollarSign,
+  Users,
+  MessageSquare
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ContactSelector, { Contact } from "./contacts/ContactSelector";
-import GroupSelector, { Group } from "./groups/GroupSelector";
+import { GroupSelector, Group } from "./groups/GroupSelector";
 import { api } from "@/contexts/AuthContext";
+
+interface MessageFormData {
+  recipientType: "direct" | "contacts" | "group";
+  recipients: string;
+  message: string;
+  senderId: string;
+  scheduled?: string;
+  recipientCount: number;
+}
+
+interface BulkMessageData {
+  message: string;
+  senderId: string;
+  scheduled?: string;
+  file?: File;
+}
+
+interface CostEstimate {
+  recipientCount: number;
+  messageUnits: number;
+  estimatedCost: number;
+  currency: string;
+  currencySymbol: string;
+}
 
 const MessageForm = () => {
   const [loading, setLoading] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
   const [scheduledMessage, setScheduledMessage] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
-  const [openContactsDialog, setOpenContactsDialog] = useState(false);
-  const [openGroupsDialog, setOpenGroupsDialog] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
   
-  // Selected contacts/groups state
-  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  const [groups, setGroups] = useState<Group[]>([]);
-  
-  const [formData, setFormData] = useState({
-    recipientType: "direct", // "direct", "contacts", "group"
+  // Form state
+  const [formData, setFormData] = useState<MessageFormData>({
+    recipientType: "direct",
     recipients: "",
     message: "",
     senderId: "",
-    csvFile: null as File | null,
     recipientCount: 0,
   });
-  
-  // Fetch groups on component mount
-  useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        const response = await api.get('/groups');
-        if (response.data.success) {
-          // Transform the groups to match the expected format
-          const formattedGroups = response.data.data.groups.map((group: any) => ({
-            id: group.id,
-            name: group.name,
-            description: group.description || "",
-            members: group.contactCount
-          }));
-          setGroups(formattedGroups);
-        }
-      } catch (error) {
-        console.error('Error fetching groups:', error);
+
+  const [bulkFormData, setBulkFormData] = useState<BulkMessageData>({
+    message: "",
+    senderId: "",
+  });
+
+  // Selected contacts/groups state
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+
+  // Cost estimation state
+  const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null);
+  const [estimatingCost, setEstimatingCost] = useState(false);
+
+  // Balance state
+  const [userBalance, setUserBalance] = useState<number>(0);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+
+  // Confirmation state
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationData, setConfirmationData] = useState<any>(null);
+
+  // Fetch user balance
+  const fetchBalance = useCallback(async () => {
+    try {
+      setBalanceLoading(true);
+      const response = await api.get('/balance');
+      
+      if (response.data.success) {
+        setUserBalance(response.data.data.balance);
       }
-    };
-    
-    fetchGroups();
+    } catch (error: any) {
+      console.error('Error fetching balance:', error);
+      toast.error('Failed to fetch account balance');
+    } finally {
+      setBalanceLoading(false);
+    }
   }, []);
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    
-    // Limit senderId to 11 characters
-    if (name === "senderId" && value.length > 11) {
-      return;
-    }
-    
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+  // Initial balance fetch
+  useEffect(() => {
+    fetchBalance();
+  }, [fetchBalance]);
+
+  // Update cost estimate when relevant data changes
+  useEffect(() => {
+    const message = bulkMode ? bulkFormData.message : formData.message;
+    const count = bulkMode ? 
+      (csvFile ? 0 : 0) : // We don't know CSV count until processed
+      formData.recipientCount;
+  }, [
+    bulkMode, 
+    formData.message, 
+    formData.recipientCount, 
+    bulkFormData.message, 
+    csvFile
+  ]);
+
+  const handleInputChange = (field: keyof MessageFormData, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+  const handleBulkInputChange = (field: keyof BulkMessageData, value: string) => {
+    setBulkFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
   };
   
   const handleContactsSelected = (contacts: Contact[]) => {
     setSelectedContacts(contacts);
-    // Join phone numbers with commas
     const phoneNumbers = contacts.map(c => c.phone).join(", ");
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       recipientType: "contacts",
       recipients: phoneNumbers,
       recipientCount: contacts.length,
-    });
-    setOpenContactsDialog(false);
+    }));
   };
   
   const handleGroupSelected = (group: Group) => {
     setSelectedGroup(group);
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       recipientType: "group",
       recipients: `group_${group.id}`,
-      recipientCount: group.members,
-    });
-    setOpenGroupsDialog(false);
+      recipientCount: group.contactCount,
+    }));
   };
 
   const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Simple validation for CSV
-      if (file.type !== "text/csv" && !file.name.endsWith('.csv')) {
+      if (!file.name.toLowerCase().endsWith('.csv') && file.type !== "text/csv") {
         toast.error("Please upload a valid CSV file");
         return;
       }
       
-      setFormData({
-        ...formData,
-        csvFile: file,
-        recipientCount: 0 // We don't know how many recipients until we process the file
-      });
-      
+      setCsvFile(file);
       toast.success(`CSV file loaded: ${file.name}`);
     }
   };
 
+  const handleDirectRecipientsChange = (value: string) => {
+    handleInputChange("recipients", value);
+    
+    // Count recipients for cost estimation
+    if (value.trim()) {
+      const phoneNumbers = value.split(/[,;]/).map(r => r.trim()).filter(Boolean);
+      setFormData(prev => ({
+        ...prev,
+        recipientCount: phoneNumbers.length,
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        recipientCount: 0,
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    if (bulkMode) {
+      if (!bulkFormData.message.trim()) {
+        toast.error("Please enter a message");
+        return false;
+      }
+      if (!csvFile) {
+        toast.error("Please upload a CSV file for bulk messaging");
+        return false;
+      }
+    } else {
+      if (!formData.message.trim()) {
+        toast.error("Please enter a message");
+        return false;
+      }
+      
+      if (formData.recipientType === "direct" && !formData.recipients.trim()) {
+        toast.error("Please enter at least one recipient");
+        return false;
+      }
+      
+      if (formData.recipientType === "contacts" && selectedContacts.length === 0) {
+        toast.error("Please select at least one contact");
+        return false;
+      }
+      
+      if (formData.recipientType === "group" && !selectedGroup) {
+        toast.error("Please select a group");
+        return false;
+      }
+    }
+
+    if (scheduledMessage && !scheduledDate) {
+      toast.error("Please select a scheduled date and time");
+      return false;
+    }
+
+    // Validate scheduled date is in the future
+    if (scheduledMessage && scheduledDate) {
+      const scheduledAt = new Date(scheduledDate);
+      if (scheduledAt <= new Date()) {
+        toast.error("Scheduled time must be in the future");
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (!validateForm()) return;
 
+    // Check balance before sending
+    if (costEstimate && costEstimate.estimatedCost > userBalance) {
+      toast.error("Insufficient balance to send this message");
+      return;
+    }
+
+    // Show confirmation dialog for cost confirmation
+    if (costEstimate && costEstimate.estimatedCost > 0) {
+      setConfirmationData({
+        cost: costEstimate.estimatedCost,
+        recipients: costEstimate.recipientCount,
+        messageUnits: costEstimate.messageUnits,
+        currency: costEstimate.currencySymbol,
+      });
+      setShowConfirmation(true);
+      return;
+    }
+
+    await sendMessage();
+  };
+
+  const sendMessage = async () => {
     try {
-      // Validation
-      if (bulkMode && !formData.csvFile) {
-        toast.error("Please upload a CSV file for bulk messaging");
-        setLoading(false);
-        return;
-      }
-
-      if (!bulkMode && !formData.recipients && formData.recipientType === "direct") {
-        toast.error("Please enter at least one recipient");
-        setLoading(false);
-        return;
-      }
-
-      if (!formData.message) {
-        toast.error("Please enter a message");
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
 
       if (bulkMode) {
         // Handle bulk SMS with CSV file
         const formDataObj = new FormData();
-        formDataObj.append('message', formData.message);
+        formDataObj.append('message', bulkFormData.message);
         
-        if (formData.senderId) {
-          formDataObj.append('senderId', formData.senderId);
+        if (bulkFormData.senderId) {
+          formDataObj.append('senderId', bulkFormData.senderId);
         }
         
         if (scheduledMessage && scheduledDate) {
           formDataObj.append('scheduled', scheduledDate);
         }
         
-        if (formData.csvFile) {
-          formDataObj.append('file', formData.csvFile);
+        if (csvFile) {
+          formDataObj.append('file', csvFile);
         }
         
         const response = await api.post('/sms/bulk-send', formDataObj, {
@@ -201,15 +319,15 @@ const MessageForm = () => {
           const result = response.data.data;
           
           if (result.status === 'scheduled') {
-            toast.success(`Message scheduled for ${new Date(result.scheduledAt).toLocaleString()}`);
+            toast.success(`Bulk message scheduled for ${new Date(result.scheduledAt).toLocaleString()}`);
           } else {
-            toast.success(`Message sent to ${result.recipients} recipient(s)`);
+            toast.success(`Bulk message sent to ${result.recipients} recipient(s)`);
           }
           
-          // Reset form
           resetForm();
+          fetchBalance(); // Refresh balance
         } else {
-          toast.error(response.data.message || 'Failed to send message');
+          throw new Error(response.data.message || 'Failed to send bulk message');
         }
       } else {
         // Handle regular SMS
@@ -231,17 +349,19 @@ const MessageForm = () => {
             toast.success(`Message sent to ${result.recipients} recipient(s)`);
           }
           
-          // Reset form
           resetForm();
+          fetchBalance(); // Refresh balance
         } else {
-          toast.error(response.data.message || 'Failed to send message');
+          throw new Error(response.data.message || 'Failed to send message');
         }
       }
     } catch (error: any) {
       console.error("Error sending message:", error);
-      toast.error(error.response?.data?.message || "Failed to send message");
+      const errorMessage = error.response?.data?.message || error.message || "Failed to send message";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
+      setShowConfirmation(false);
     }
   };
   
@@ -251,18 +371,28 @@ const MessageForm = () => {
       recipients: "",
       message: "",
       senderId: "",
-      csvFile: null,
       recipientCount: 0,
+    });
+
+    setBulkFormData({
+      message: "",
+      senderId: "",
     });
     
     if (csvInputRef.current) {
       csvInputRef.current.value = '';
     }
     
+    setCsvFile(null);
     setSelectedContacts([]);
     setSelectedGroup(null);
     setScheduledMessage(false);
     setScheduledDate("");
+    setCostEstimate(null);
+  };
+
+  const getMessageCount = (message: string) => {
+    return Math.ceil(message.length / 160);
   };
 
   return (
@@ -272,11 +402,19 @@ const MessageForm = () => {
       transition={{ duration: 0.6 }}
       className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-subtle"
     >
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-          Compose Message
-        </h2>
-        <div className="flex items-center space-x-2">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            Compose Message
+          </h2>
+          {/* {!balanceLoading && (
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Balance: <span className="font-medium">${userBalance.toFixed(2)}</span>
+            </p>
+          )} */}
+        </div>
+        <div className="flex items-center space-x-3">
           <span className="text-sm text-gray-600 dark:text-gray-400">Bulk Mode</span>
           <Switch 
             checked={bulkMode} 
@@ -292,19 +430,22 @@ const MessageForm = () => {
           {bulkMode ? (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Bulk Recipients</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Bulk Recipients
+                </CardTitle>
                 <CardDescription>
-                  Upload a CSV file with phone numbers
+                  Upload a CSV file with phone numbers (one per row or in a 'phone' column)
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="mt-1 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-6">
-                  <div className="space-y-2 text-center">
+                  <div className="space-y-3 text-center w-full">
                     <FileText className="mx-auto h-12 w-12 text-gray-400" />
                     <div className="flex text-sm text-gray-600 dark:text-gray-400">
                       <label
                         htmlFor="csvFile"
-                        className="relative cursor-pointer rounded-md font-medium text-jaylink-600 hover:text-jaylink-700"
+                        className="relative cursor-pointer rounded-md font-medium text-jaylink-600 hover:text-jaylink-700 mx-auto"
                       >
                         <span>Upload CSV file</span>
                         <Input
@@ -317,29 +458,53 @@ const MessageForm = () => {
                           className="sr-only"
                         />
                       </label>
-                      <p className="pl-1">or drag and drop</p>
                     </div>
-                    <p className="text-xs text-gray-500">CSV format with one phone number per line</p>
+                    <p className="text-xs text-gray-500">
+                      CSV format with phone numbers. Maximum file size: 5MB
+                    </p>
+                    {csvFile && (
+                      <div className="mt-3 flex items-center justify-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-md">
+                        <FileText className="h-4 w-4 text-green-600" />
+                        <span className="text-sm text-green-800 dark:text-green-200">
+                          {csvFile.name} ({Math.round(csvFile.size / 1024)} KB)
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCsvFile(null);
+                            if (csvInputRef.current) {
+                              csvInputRef.current.value = '';
+                            }
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                {formData.csvFile && (
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      File: {formData.csvFile.name}
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           ) : (
             /* Regular Mode Recipient Selection */
             <div className="space-y-4">
               <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-4`}>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label htmlFor="recipientType">Recipient Type</Label>
                   <Select 
                     value={formData.recipientType} 
-                    onValueChange={(value) => handleSelectChange("recipientType", value)}
+                    onValueChange={(value: "direct" | "contacts" | "group") => {
+                      setFormData(prev => ({
+                        ...prev,
+                        recipientType: value,
+                        recipients: "",
+                        recipientCount: 0,
+                      }));
+                      setSelectedContacts([]);
+                      setSelectedGroup(null);
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select recipient type" />
@@ -352,35 +517,33 @@ const MessageForm = () => {
                   </Select>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label htmlFor="senderId">Sender ID</Label>
                   <Input
                     id="senderId"
-                    name="senderId"
                     placeholder="Enter Sender ID (max 11 characters)"
                     value={formData.senderId}
-                    onChange={handleInputChange}
-                    className="mt-1"
+                    onChange={(e) => handleInputChange("senderId", e.target.value)}
                     maxLength={11}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Maximum 11 characters
+                  <p className="text-xs text-gray-500">
+                    Optional. Max 11 characters.
                   </p>
                 </div>
               </div>
 
+              {/* Recipient Input Based on Type */}
               {formData.recipientType === "direct" && (
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="recipients">Recipients</Label>
-                  <Input
+                  <Textarea
                     id="recipients"
-                    name="recipients"
                     placeholder="Enter phone numbers separated by commas"
                     value={formData.recipients}
-                    onChange={handleInputChange}
-                    className="mt-1"
+                    onChange={(e) => handleDirectRecipientsChange(e.target.value)}
+                    rows={3}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500">
                     Format: +234800123456, +234800123457
                   </p>
                 </div>
@@ -393,12 +556,12 @@ const MessageForm = () => {
                     onContactsSelected={handleContactsSelected}
                     buttonText={selectedContacts.length > 0 ? `${selectedContacts.length} Contacts Selected` : "Select Contacts"}
                     preSelectedContacts={selectedContacts}
-                    showCount={false}
+                    showCount={true}
                   />
                   
                   {selectedContacts.length > 0 && (
-                    <div className="text-sm text-muted-foreground">
-                      Selected {selectedContacts.length} contact(s)
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Selected {selectedContacts.length} contact{selectedContacts.length !== 1 ? 's' : ''}
                     </div>
                   )}
                 </div>
@@ -408,14 +571,14 @@ const MessageForm = () => {
                 <div className="space-y-2">
                   <Label>Select Group</Label>
                   <GroupSelector 
-                    groups={groups} 
                     onGroupSelected={handleGroupSelected}
                     buttonText={selectedGroup ? selectedGroup.name : "Select Group"}
+                    selectedGroup={selectedGroup}
                   />
                   
                   {selectedGroup && (
-                    <div className="text-sm text-muted-foreground">
-                      Group with {selectedGroup.members} member(s)
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      Group with {selectedGroup.contactCount} member{selectedGroup.contactCount !== 1 ? 's' : ''}
                     </div>
                   )}
                 </div>
@@ -425,47 +588,83 @@ const MessageForm = () => {
 
           {/* Sender ID for Bulk Mode */}
           {bulkMode && (
-            <div className="space-y-1">
-              <Label htmlFor="senderId">Sender ID</Label>
+            <div className="space-y-2">
+              <Label htmlFor="bulkSenderId">Sender ID</Label>
               <Input
-                id="senderId"
-                name="senderId"
+                id="bulkSenderId"
                 placeholder="Enter Sender ID (max 11 characters)"
-                value={formData.senderId}
-                onChange={handleInputChange}
-                className="mt-1"
+                value={bulkFormData.senderId}
+                onChange={(e) => handleBulkInputChange("senderId", e.target.value)}
                 maxLength={11}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Maximum 11 characters
+              <p className="text-xs text-gray-500">
+                Optional. Max 11 characters.
               </p>
             </div>
           )}
 
-          {/* Message Content (Common for Both Modes) */}
-          <div>
+          {/* Message Content */}
+          <div className="space-y-2">
             <Label htmlFor="message">Message</Label>
             <Textarea
               id="message"
-              name="message"
               placeholder="Type your message here..."
               rows={4}
-              value={formData.message}
-              onChange={handleInputChange}
-              className="mt-1"
+              value={bulkMode ? bulkFormData.message : formData.message}
+              onChange={(e) => {
+                if (bulkMode) {
+                  handleBulkInputChange("message", e.target.value);
+                } else {
+                  handleInputChange("message", e.target.value);
+                }
+              }}
             />
-            <div className="flex justify-between mt-1">
-              <p className="text-xs text-gray-500">
-                Character count: {formData.message.length}
-              </p>
-              <p className="text-xs text-gray-500">
-                {Math.ceil(formData.message.length / 160)} SMS unit(s)
-              </p>
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>
+                Characters: {(bulkMode ? bulkFormData.message : formData.message).length}
+              </span>
+              <span>
+                SMS units: {getMessageCount(bulkMode ? bulkFormData.message : formData.message)}
+              </span>
             </div>
           </div>
 
-          {/* Schedule Controls (Common for Both Modes) */}
-          <div className="flex items-center space-x-2">
+          {/* Cost Estimate */}
+          {costEstimate && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <DollarSign className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Cost Estimate</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-300">Recipients:</span>
+                      <span className="ml-2 font-medium">{costEstimate.recipientCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 dark:text-blue-300">SMS Units:</span>
+                      <span className="ml-2 font-medium">{costEstimate.messageUnits}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-blue-700 dark:text-blue-300">Estimated Cost:</span>
+                      <span className="ml-2 font-medium text-lg">
+                        {costEstimate.currencySymbol}{costEstimate.estimatedCost.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  {costEstimate.estimatedCost > userBalance && (
+                    <div className="mt-2 flex items-center gap-2 text-red-600">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-sm">Insufficient balance</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Schedule Controls */}
+          <div className="flex items-center space-x-3">
             <Switch 
               id="scheduledMessage"
               checked={scheduledMessage} 
@@ -475,22 +674,21 @@ const MessageForm = () => {
           </div>
 
           {scheduledMessage && (
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="scheduledDate">Schedule Date & Time</Label>
-              <div className="flex items-center">
+              <div className="flex items-center gap-2">
                 <Input
                   id="scheduledDate"
-                  name="scheduledDate"
                   type="datetime-local"
                   min={new Date().toISOString().slice(0, 16)}
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
                   required={scheduledMessage}
-                  className="mt-1"
+                  className="flex-1"
                 />
-                <Calendar className="ml-2 text-gray-400" size={20} />
+                <Calendar className="text-gray-400" size={20} />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500">
                 Messages will be sent at the scheduled time
               </p>
             </div>
@@ -500,7 +698,13 @@ const MessageForm = () => {
           <Button
             type="submit"
             className="w-full bg-jaylink-600 hover:bg-jaylink-700 flex items-center justify-center"
-            disabled={loading}
+            disabled={
+              loading || 
+              estimatingCost ||
+              (costEstimate && costEstimate.estimatedCost > userBalance) ||
+              (!bulkMode && formData.recipientCount === 0) ||
+              (bulkMode && !csvFile)
+            }
           >
             {loading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -514,6 +718,56 @@ const MessageForm = () => {
           </Button>
         </div>
       </form>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Message Send</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Please confirm the details of your message:</p>
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span>Recipients:</span>
+                    <span className="font-medium">{confirmationData?.recipients}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>SMS Units:</span>
+                    <span className="font-medium">{confirmationData?.messageUnits}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Cost:</span>
+                    <span className="font-medium text-lg">
+                      {confirmationData?.currency}{confirmationData?.cost.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600">
+                  This amount will be deducted from your account balance.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={sendMessage}
+              disabled={loading}
+              className="bg-jaylink-600 hover:bg-jaylink-700"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                'Confirm & Send'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 };

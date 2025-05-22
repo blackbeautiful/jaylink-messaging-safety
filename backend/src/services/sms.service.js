@@ -974,6 +974,27 @@ const processScheduledMessages = async () => {
         
         await scheduledMessage.update({ status: 'sent' }, { transaction: t });
         
+        // Send WebSocket notification (import this function from websocket.util.js)
+        try {
+          // Create WebSocket update payload
+          const wsPayload = {
+            id: scheduledMessage.id,
+            status: 'sent',
+            recipientCount: scheduledMessage.recipientCount,
+            messageId: messageId,
+            timestamp: new Date().toISOString()
+          };
+
+          // Import websocket utility if it exists
+          if (typeof emit === 'function') {
+            // Emit to user's channel
+            emit(`user:${user.id}`, 'scheduled_update', wsPayload);
+          }
+        } catch (wsError) {
+          logger.error(`WebSocket notification error: ${wsError.message}`);
+          // Don't fail the transaction if WebSocket notification fails
+        }
+        
         // Notification outside transaction
         process.nextTick(() => {
           notificationService.createNotification(
@@ -1001,6 +1022,27 @@ const processScheduledMessages = async () => {
           status: 'failed',
           errorMessage: error.message
         }, { transaction: t });
+        
+        // Send WebSocket notification for failure
+        try {
+          // Create WebSocket update payload for failure
+          const wsPayload = {
+            id: scheduledMessage.id,
+            status: 'failed',
+            recipientCount: scheduledMessage.recipientCount,
+            errorMessage: error.message,
+            timestamp: new Date().toISOString()
+          };
+
+          // Import websocket utility if it exists
+          if (typeof emit === 'function') {
+            // Emit to user's channel
+            emit(`user:${scheduledMessage.userId}`, 'scheduled_update', wsPayload);
+          }
+        } catch (wsError) {
+          logger.error(`WebSocket failure notification error: ${wsError.message}`);
+          // Don't fail the transaction if WebSocket notification fails
+        }
         
         process.nextTick(() => {
           notificationService.createNotification(
@@ -1038,6 +1080,56 @@ const processScheduledMessages = async () => {
   }
 };
 
+/**
+ * Get updates for scheduled messages
+ * @param {number} userId - User ID
+ * @param {Array} messageIds - Array of scheduled message IDs to check
+ * @returns {Array} Array of updated message status information
+ */
+const getScheduledMessageUpdates = async (userId, messageIds) => {
+  try {
+    // Find all provided scheduled messages that belong to this user
+    // and have been updated (sent or failed)
+    const updatedMessages = await ScheduledMessage.findAll({
+      where: {
+        userId,
+        id: { [Op.in]: messageIds },
+        status: { [Op.in]: ['sent', 'failed'] }
+      }
+    });
+    
+    if (!updatedMessages || updatedMessages.length === 0) {
+      return [];
+    }
+    
+    // Format the updates
+    const updates = updatedMessages.map(message => {
+      // Basic update information
+      const update = {
+        id: message.id,
+        status: message.status,
+        recipientCount: message.recipientCount
+      };
+      
+      // Add error message if failed
+      if (message.status === 'failed' && message.errorMessage) {
+        update.errorMessage = message.errorMessage;
+      }
+      
+      return update;
+    });
+    
+    return updates;
+  } catch (error) {
+    logger.error(`Get scheduled message updates error: ${error.message}`, {
+      stack: error.stack,
+      userId,
+      messageIds
+    });
+    throw error;
+  }
+};
+
 module.exports = {
   sendSMS,
   sendBulkSMS,
@@ -1045,6 +1137,7 @@ module.exports = {
   getMessageHistory,
   getScheduledMessages,
   cancelScheduledMessage,
+  getScheduledMessageUpdates,
   getMessageAnalytics,
   processScheduledMessages,
   getGroupPhoneNumbers,

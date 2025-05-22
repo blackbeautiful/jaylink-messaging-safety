@@ -1,7 +1,11 @@
 // backend/src/routes/notification.routes.js
+/**
+ * Enhanced notification routes with WebSocket support
+ * Optimized for performance and resource efficiency
+ */
 const express = require('express');
 const notificationController = require('../controllers/notification.controller');
-const { authenticate } = require('../middleware/auth.middleware');
+const { authenticate, authorizeAdmin } = require('../middleware/auth.middleware');
 const validate = require('../middleware/validator.middleware');
 const notificationValidator = require('../validators/notification.validator');
 
@@ -24,7 +28,11 @@ router.get(
  * @desc Get notification statistics
  * @access Private
  */
-router.get('/stats', authenticate, notificationController.getNotificationStats);
+router.get(
+  '/stats', 
+  authenticate, 
+  notificationController.getNotificationStats
+);
 
 /**
  * @route POST /api/notifications/read
@@ -43,7 +51,11 @@ router.post(
  * @desc Mark a single notification as read
  * @access Private
  */
-router.patch('/:id/read', authenticate, notificationController.markOneAsRead);
+router.patch(
+  '/:id/read', 
+  authenticate, 
+  notificationController.markOneAsRead
+);
 
 /**
  * @route DELETE /api/notifications
@@ -62,7 +74,11 @@ router.delete(
  * @desc Delete a single notification
  * @access Private
  */
-router.delete('/:id', authenticate, notificationController.deleteNotification);
+router.delete(
+  '/:id', 
+  authenticate, 
+  notificationController.deleteNotification
+);
 
 /**
  * @route PUT /api/notifications/settings
@@ -72,7 +88,7 @@ router.delete('/:id', authenticate, notificationController.deleteNotification);
 router.put(
   '/settings',
   authenticate,
-  validate(notificationValidator.updateSettings),
+  validate(notificationValidator.updateNotificationSettingsSchema),
   notificationController.updateSettings
 );
 
@@ -95,6 +111,7 @@ router.get(
 router.post(
   '/device-token',
   authenticate,
+  validate(notificationValidator.registerDeviceTokenSchema),
   notificationController.registerDeviceToken
 );
 
@@ -106,7 +123,32 @@ router.post(
 router.delete(
   '/device-token',
   authenticate,
+  validate(notificationValidator.unregisterDeviceTokenSchema),
   notificationController.unregisterDeviceToken
+);
+
+/**
+ * @route POST /api/notifications/check-scheduled
+ * @desc Check for updates to scheduled messages
+ * @access Private
+ */
+router.post(
+  '/check-scheduled',
+  authenticate,
+  validate(notificationValidator.checkScheduledUpdatesSchema),
+  notificationController.checkScheduledUpdates
+);
+
+/**
+ * @route GET /api/notifications/ws-status
+ * @desc Get WebSocket server status (admin only)
+ * @access Private (Admin)
+ */
+router.get(
+  '/ws-status',
+  authenticate,
+  authorizeAdmin,
+  notificationController.getWebSocketStatus
 );
 
 // Development-only routes
@@ -119,7 +161,7 @@ if (process.env.NODE_ENV === 'development') {
   router.post(
     '/test',
     authenticate,
-    validate(notificationValidator.createTestNotification),
+    validate(notificationValidator.createTestNotificationSchema),
     notificationController.createTestNotification
   );
 }

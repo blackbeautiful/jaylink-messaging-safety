@@ -60,7 +60,7 @@ const config = {
     defaultSender: process.env.SMS_PROVIDER_DEFAULT_SENDER || 'JayLink',
     // Pricing configuration (in kobo per segment)
     pricing: {
-      localSms: parseInt(process.env.SMS_PRICING_LOCAL, 10) || 300, // 3 naira per local SMS
+      localSms: parseInt(process.env.SMS_PRICING_LOCAL, 10) || 500, // 5 naira per local SMS
       internationalSms: parseInt(process.env.SMS_PRICING_INTERNATIONAL, 10) || 1000, // 10 naira per international SMS
     },
     // Provider-specific configuration
@@ -110,13 +110,23 @@ const config = {
     channels: (process.env.PAYSTACK_CHANNELS || 'card,bank_transfer,ussd').split(','),
   },
 
+  websocket: {
+    enabled: process.env.WEBSOCKET_ENABLED === 'true',
+    path: process.env.WEBSOCKET_PATH || '/ws',
+    pingInterval: parseInt(process.env.WEBSOCKET_PING_INTERVAL || '30000', 10),
+    maxConnections: parseInt(process.env.WEBSOCKET_MAX_CONNECTIONS || '10000', 10),
+    messageRateLimit: parseInt(process.env.WEBSOCKET_MESSAGE_RATE_LIMIT || '100', 10),
+  },
+
   // Notification configuration
   notifications: {
     pushEnabled: process.env.PUSH_NOTIFICATIONS_ENABLED === 'true' || false,
+    emailEnabled: process.env.EMAIL_NOTIFICATIONS_ENABLED === 'true' || false,
     fcmServerKey: process.env.FCM_SERVER_KEY,
     webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY,
     webPushPrivateKey: process.env.WEB_PUSH_PRIVATE_KEY,
     retentionDays: parseInt(process.env.NOTIFICATION_RETENTION_DAYS, 10) || 30,
+    websocketEnabled: process.env.WEBSOCKET_NOTIFICATIONS_ENABLED === 'true' || false,
   },
 
   // Firebase configuration for push notifications

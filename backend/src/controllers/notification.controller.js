@@ -1,5 +1,10 @@
 // backend/src/controllers/notification.controller.js
+/**
+ * Enhanced Notification Controller
+ * Provides API endpoints for notifications with WebSocket support
+ */
 const notificationService = require('../services/notification.service');
+const websocket = require('../utils/websocket.util');
 const response = require('../utils/response.util');
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
@@ -23,7 +28,8 @@ const getNotifications = async (req, res, next) => {
       read: req.query.read,
       type: req.query.type,
       startDate: req.query.startDate,
-      endDate: req.query.endDate
+      endDate: req.query.endDate,
+      includeMeta: req.query.includeMeta === 'true'
     };
     
     const result = await notificationService.getUserNotifications(userId, options);
@@ -218,6 +224,15 @@ const updateSettings = async (req, res, next) => {
     
     const result = await notificationService.updateNotificationSettings(userId, settings);
     
+    // Notify via WebSocket if initialized
+    if (websocket.isInitialized()) {
+      websocket.emit(`user:${userId}`, 'settings_updated', {
+        type: 'notification_settings',
+        settings: result,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     return response.success(res, { settings: result }, 'Notification settings updated successfully');
   } catch (error) {
     logger.error(`Update settings controller error: ${error.message}`, { 
@@ -241,7 +256,7 @@ const getSettings = async (req, res, next) => {
     }
     
     const userId = req.user.id;
-    const settings = await notificationService.getUserSettings(userId);
+    const settings = await notificationService.getUserNotificationSettings(userId);
     
     return response.success(res, { settings }, 'Notification settings retrieved successfully');
   } catch (error) {
@@ -320,6 +335,69 @@ const unregisterDeviceToken = async (req, res, next) => {
 };
 
 /**
+ * Check for scheduled message updates
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const checkScheduledUpdates = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      throw new ApiError('User not authenticated', 401);
+    }
+    
+    const userId = req.user.id;
+    const { messageIds } = req.body;
+    
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return response.success(res, { updates: [] }, 'No message IDs provided');
+    }
+    
+    // Get updates for the provided message IDs
+    const updates = await notificationService.getScheduledMessageUpdates(userId, messageIds);
+    
+    return response.success(res, { updates }, 'Scheduled message updates retrieved successfully');
+  } catch (error) {
+    logger.error(`Check scheduled updates controller error: ${error.message}`, { 
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Get WebSocket server status (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const getWebSocketStatus = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id || !req.user.isAdmin) {
+      throw new ApiError('Unauthorized', 403);
+    }
+    
+    if (!websocket.isInitialized()) {
+      return response.success(res, { 
+        initialized: false,
+        message: 'WebSocket server is not initialized' 
+      });
+    }
+    
+    const status = websocket.getStatus();
+    
+    return response.success(res, status, 'WebSocket server status retrieved successfully');
+  } catch (error) {
+    logger.error(`Get WebSocket status controller error: ${error.message}`, { 
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    next(error);
+  }
+};
+
+/**
  * Create a test notification (for development/testing)
  * Only available in development mode
  * @param {Object} req - Express request object
@@ -338,7 +416,15 @@ const createTestNotification = async (req, res, next) => {
     }
     
     const userId = req.user.id;
-    const { title, message, type = 'info', metadata, sendEmail = false } = req.body;
+    const { 
+      title, 
+      message, 
+      type = 'info', 
+      metadata, 
+      sendEmail = false,
+      sendPush = true,
+      sendWebSocket = true
+    } = req.body;
     
     if (!title || !message) {
       throw new ApiError('Title and message are required', 400);
@@ -350,7 +436,9 @@ const createTestNotification = async (req, res, next) => {
       message,
       type,
       metadata || {},
-      sendEmail
+      sendEmail,
+      sendPush,
+      sendWebSocket
     );
     
     return response.success(res, { notification }, 'Test notification created successfully');
@@ -374,5 +462,7 @@ module.exports = {
   getSettings,
   registerDeviceToken,
   unregisterDeviceToken,
+  checkScheduledUpdates,
+  getWebSocketStatus,
   createTestNotification
 };

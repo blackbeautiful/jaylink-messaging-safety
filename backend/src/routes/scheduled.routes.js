@@ -24,10 +24,18 @@ router.get(
  * @desc Cancel a scheduled message
  * @access Private
  */
-router.delete(
-  '/:id',
+router.delete('/:id', authenticate, scheduledController.cancelScheduledMessage);
+
+/**
+ * @route POST /api/scheduled/check-updates
+ * @desc Check for updates to scheduled messages
+ * @access Private
+ */
+router.post(
+  '/check-updates',
   authenticate,
-  scheduledController.cancelScheduledMessage
+  validate(smsValidator.checkScheduledUpdatesSchema),
+  scheduledController.checkScheduledUpdates
 );
 
 module.exports = router;

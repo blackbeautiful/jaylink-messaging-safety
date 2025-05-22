@@ -1,10 +1,15 @@
 // backend/src/services/notification.service.js
+/**
+ * Enhanced Notification Service with WebSocket Integration
+ * Optimized for real-time delivery with fallback mechanisms
+ */
 const { Op } = require('sequelize');
 const db = require('../models');
 const logger = require('../config/logger');
 const ApiError = require('../utils/api-error.util');
 const config = require('../config/config');
 const emailService = require('./email.service');
+const websocket = require('../utils/websocket.util');
 const Queue = require('../utils/queue.util');
 
 const User = db.User;
@@ -12,11 +17,15 @@ const Notification = db.Notification;
 const Setting = db.Setting;
 const DeviceToken = db.DeviceToken;
 
-// Create push notification queue
-const pushQueue = new Queue('pushNotifications');
+// Create push notification queue with optimized settings
+const pushQueue = new Queue('pushNotifications', {
+  limiter: { max: 300, duration: 60000 }, // 300 jobs per minute
+  removeOnComplete: true, 
+  removeOnFail: 1000 // Keep last 1000 failed jobs for debugging
+});
 
 /**
- * Create a notification for a user
+ * Create a notification for a user with WebSocket delivery
  * @param {number} userId - User ID to notify
  * @param {string} title - Notification title
  * @param {string} message - Notification message
@@ -24,9 +33,11 @@ const pushQueue = new Queue('pushNotifications');
  * @param {Object} metadata - Additional notification metadata
  * @param {boolean} sendEmail - Whether to send an email notification
  * @param {boolean} sendPush - Whether to send a push notification
+ * @param {boolean} sendWebSocket - Whether to send a WebSocket notification
  * @returns {Object} Created notification
  */
-const createNotification = async (userId, title, message, type = 'info', metadata = {}, sendEmail = false, sendPush = true) => {
+const createNotification = async (userId, title, message, type = 'info', metadata = {}, 
+                                 sendEmail = false, sendPush = true, sendWebSocket = true) => {
   try {
     // Check if user exists
     const user = await User.findByPk(userId);
@@ -36,34 +47,31 @@ const createNotification = async (userId, title, message, type = 'info', metadat
     }
     
     // Check user notification settings
-    const userSettings = await Setting.findOne({
-      where: {
-        userId,
-        category: 'notifications'
-      }
-    });
-    
-    // Get notification settings or use defaults if not found
-    const notificationSettings = userSettings?.settings || {};
+    const userSettings = await getUserNotificationSettings(userId);
     
     // Check if notifications are enabled for this type
     const settingKey = `${type}Notifications`;
-    if (notificationSettings[settingKey] === false) {
+    if (userSettings[settingKey] === false) {
       logger.debug(`${type} notifications disabled for user ${userId}`);
       return null;
     }
     
-    // Determine push and email notification status based on user settings
+    // Determine delivery channels based on user settings
     const shouldSendPush = sendPush && 
-                          notificationSettings.pushNotifications !== false && 
+                          userSettings.pushNotifications !== false && 
                           config.notifications.pushEnabled;
                           
     const shouldSendEmail = sendEmail && 
-                          notificationSettings.emailAlerts !== false;
+                          userSettings.emailAlerts !== false;
+                          
+    const shouldSendWebSocket = sendWebSocket && 
+                              config.websocket?.enabled !== false &&
+                              websocket.isInitialized();
     
     // Initial status for push and email
     const pushStatus = shouldSendPush ? 'pending' : 'not_applicable';
     const emailStatus = shouldSendEmail ? 'pending' : 'not_applicable';
+    const wsStatus = shouldSendWebSocket ? 'pending' : 'not_applicable';
     
     // Create notification record
     const notification = await Notification.create({
@@ -74,10 +82,36 @@ const createNotification = async (userId, title, message, type = 'info', metadat
       metadata,
       read: false,
       pushStatus,
-      emailStatus
+      emailStatus,
+      wsStatus
     });
     
-    // Process push notification if needed
+    // Process WebSocket notification immediately (for real-time experience)
+    if (shouldSendWebSocket) {
+      try {
+        const wsDelivered = processWebSocketNotification(userId, notification.id, title, message, type, metadata);
+        
+        // Update WebSocket status based on delivery
+        if (wsDelivered) {
+          await notification.update({ wsStatus: 'sent' });
+        } else {
+          // If WebSocket failed but we have push or email fallbacks, mark as pending_retry
+          // This allows the background job to attempt delivery again
+          const hasOtherChannels = shouldSendPush || shouldSendEmail;
+          await notification.update({ 
+            wsStatus: hasOtherChannels ? 'pending_retry' : 'failed' 
+          });
+        }
+      } catch (wsError) {
+        logger.error(`WebSocket notification error: ${wsError.message}`, { 
+          userId, 
+          notificationId: notification.id 
+        });
+        await notification.update({ wsStatus: 'failed' });
+      }
+    }
+    
+    // Process push notification if needed (in background)
     if (shouldSendPush) {
       processPushNotification(userId, notification.id, title, message, type, metadata)
         .catch(err => logger.error(`Push notification error: ${err.message}`, { 
@@ -87,7 +121,7 @@ const createNotification = async (userId, title, message, type = 'info', metadat
         }));
     }
     
-    // Process email notification if needed
+    // Process email notification if needed (in background)
     if (shouldSendEmail) {
       processEmailNotification(user, notification.id, title, message, type, metadata)
         .catch(err => logger.error(`Email notification error: ${err.message}`, {
@@ -107,6 +141,96 @@ const createNotification = async (userId, title, message, type = 'info', metadat
     });
     // Don't throw the error - notifications should be non-blocking
     return null;
+  }
+};
+
+/**
+ * Get user notification settings with caching
+ * @param {number} userId - User ID
+ * @returns {Object} User notification settings
+ */
+const getUserNotificationSettings = async (userId) => {
+  try {
+    // Get settings
+    const userSettings = await Setting.findOne({
+      where: {
+        userId,
+        category: 'notifications'
+      }
+    });
+    
+    // Return settings or defaults
+    if (userSettings && userSettings.settings) {
+      return userSettings.settings;
+    }
+    
+    // Default notification settings
+    return {
+      emailAlerts: true,
+      lowBalanceAlerts: true,
+      deliveryReports: true,
+      marketingEmails: false,
+      pushNotifications: true,
+      infoNotifications: true,
+      successNotifications: true,
+      warningNotifications: true,
+      errorNotifications: true
+    };
+  } catch (error) {
+    logger.error(`Get user notification settings error: ${error.message}`, {
+      userId
+    });
+    
+    // Return default settings on error to ensure notifications still work
+    return {
+      emailAlerts: true,
+      pushNotifications: true,
+      infoNotifications: true,
+      successNotifications: true,
+      warningNotifications: true,
+      errorNotifications: true
+    };
+  }
+};
+
+/**
+ * Process WebSocket notification (immediate delivery)
+ * @param {number} userId - User ID
+ * @param {number} notificationId - Notification ID
+ * @param {string} title - Notification title
+ * @param {string} message - Notification message
+ * @param {string} type - Notification type
+ * @param {Object} metadata - Additional notification metadata
+ * @returns {boolean} True if successfully delivered
+ */
+const processWebSocketNotification = (userId, notificationId, title, message, type, metadata) => {
+  try {
+    if (!websocket.isInitialized()) {
+      return false;
+    }
+    
+    // Prepare notification payload
+    const payload = {
+      id: notificationId,
+      title,
+      message,
+      type,
+      metadata,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+    
+    // Send to user's channel
+    const sentCount = websocket.emit(`user:${userId}`, 'notification', payload);
+    
+    // Return true if delivered to at least one client
+    return sentCount > 0;
+  } catch (error) {
+    logger.error(`WebSocket notification error: ${error.message}`, {
+      userId,
+      notificationId
+    });
+    return false;
   }
 };
 
@@ -165,7 +289,7 @@ const processPushNotification = async (userId, notificationId, title, message, t
  */
 const queuePushNotification = async (userId, notificationId, title, message, type, deviceTokens, metadata) => {
   try {
-    // Add to queue for processing
+    // Add to queue for processing with improved error handling and backoff
     const job = await pushQueue.add('sendPushNotification', {
       userId,
       notificationId,
@@ -176,11 +300,15 @@ const queuePushNotification = async (userId, notificationId, title, message, typ
       metadata,
       timestamp: new Date().toISOString()
     }, {
-      attempts: 3,
+      attempts: 5,
       backoff: {
         type: 'exponential',
         delay: 5000 // 5 seconds initial delay, then exponential backoff
-      }
+      },
+      removeOnComplete: true,
+      removeOnFail: 100, // Keep the last 100 failed jobs
+      timeout: 30000, // 30 second timeout for processing
+      priority: getPriorityForNotificationType(type)
     });
     
     return {
@@ -201,6 +329,24 @@ const queuePushNotification = async (userId, notificationId, title, message, typ
     );
     
     throw error;
+  }
+};
+
+/**
+ * Get priority based on notification type
+ * @private
+ */
+const getPriorityForNotificationType = (type) => {
+  switch (type) {
+    case 'error':
+      return 1; // Highest priority
+    case 'warning':
+      return 2;
+    case 'success':
+      return 3;
+    case 'info':
+    default:
+      return 4; // Lowest priority
   }
 };
 
@@ -228,7 +374,7 @@ const processEmailNotification = async (user, notificationId, title, message, ty
       template,
       context: {
         title,
-        firstName: user.firstName,
+        firstName: user.firstName || user.name || 'User',
         message,
         metadata,
         appUrl: config.frontendUrl,
@@ -291,7 +437,7 @@ const createBalanceNotification = async (userId, operation, amount, newBalance) 
   
   // Send email for low balance alerts
   const sendEmail = operation === 'deduct' && 
-                  newBalance < (config.systemDefaults.minimumBalanceThreshold || 500);
+                  newBalance < (config.systemDefaults?.minimumBalanceThreshold || 500);
   
   return createNotification(userId, title, message, type, metadata, sendEmail);
 };
@@ -379,6 +525,47 @@ const createMessageDeliveryNotification = async (userId, messageId, recipients, 
 };
 
 /**
+ * Create a notification for scheduled message status
+ * @param {number} userId - User ID to notify
+ * @param {string} scheduleId - Scheduled message ID
+ * @param {string} status - Status (sent, failed)
+ * @param {number} recipients - Number of recipients
+ * @param {Object} additionalData - Additional data
+ * @returns {Object} Created notification
+ */
+const createScheduledMessageStatusNotification = async (userId, scheduleId, status, recipients, additionalData = {}) => {
+  let title, message, type, sendEmail;
+  
+  if (status === 'sent') {
+    title = 'Scheduled Message Sent';
+    message = `Your scheduled message to ${recipients} recipient(s) has been sent successfully.`;
+    type = 'success';
+    sendEmail = false;
+  } else if (status === 'failed') {
+    title = 'Scheduled Message Failed';
+    message = `Your scheduled message to ${recipients} recipient(s) could not be sent. ${additionalData.errorMessage || ''}`;
+    type = 'error';
+    sendEmail = true;
+  } else {
+    title = 'Scheduled Message Update';
+    message = `Your scheduled message to ${recipients} recipient(s) has been updated to status: ${status}.`;
+    type = 'info';
+    sendEmail = false;
+  }
+  
+  const metadata = { 
+    scheduleId,
+    status,
+    recipients,
+    ...additionalData,
+    timestamp: new Date().toISOString()
+  };
+  
+  // WebSocket notification is ideal for scheduled message status updates
+  return createNotification(userId, title, message, type, metadata, sendEmail, true, true);
+};
+
+/**
  * Get user notifications with pagination
  * @param {number} userId - User ID
  * @param {Object} options - Query options
@@ -456,23 +643,44 @@ const getUserNotifications = async (userId, options = {}) => {
 };
 
 /**
- * Mark notifications as read
+ * Mark notifications as read with WebSocket update
  * @param {number} userId - User ID
- * @param {number|Array} notificationIds - Notification ID(s) to mark as read
+ * @param {number|Array|string} notificationIds - Notification ID(s) to mark as read or 'all'
  * @returns {Object} Success status with count
  */
 const markAsRead = async (userId, notificationIds) => {
   try {
+    let updatedIds = [];
+    
     // If notificationIds is 'all', mark all as read
     if (notificationIds === 'all') {
+      // Find all unread notifications first to get their IDs
+      const unreadNotifications = await Notification.findAll({
+        attributes: ['id'],
+        where: { userId, read: false }
+      });
+      
+      updatedIds = unreadNotifications.map(n => n.id);
+      
+      // Update all unread notifications
       const result = await Notification.update(
         { read: true },
         { where: { userId, read: false } }
       );
       
+      // Send WebSocket update if WebSockets are enabled
+      if (websocket.isInitialized() && updatedIds.length > 0) {
+        websocket.emit(`user:${userId}`, 'notifications_read', {
+          ids: updatedIds,
+          all: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       return {
         success: true,
         updated: result[0],
+        ids: updatedIds,
         message: `Marked ${result[0]} notifications as read`
       };
     }
@@ -496,9 +704,18 @@ const markAsRead = async (userId, notificationIds) => {
       }
     );
     
+    // Send WebSocket update if WebSockets are enabled
+    if (websocket.isInitialized() && result[0] > 0) {
+      websocket.emit(`user:${userId}`, 'notifications_read', {
+        ids,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     return {
       success: true,
       updated: result[0],
+      ids,
       message: `Marked ${result[0]} notifications as read`
     };
   } catch (error) {
@@ -512,7 +729,7 @@ const markAsRead = async (userId, notificationIds) => {
 };
 
 /**
- * Delete notifications
+ * Delete notifications with WebSocket update
  * @param {number} userId - User ID
  * @param {number|Array} notificationIds - Notification ID(s) to delete
  * @returns {Object} Success status with count
@@ -535,9 +752,18 @@ const deleteNotifications = async (userId, notificationIds) => {
       }
     });
     
+    // Send WebSocket update if WebSockets are enabled
+    if (websocket.isInitialized() && deleted > 0) {
+      websocket.emit(`user:${userId}`, 'notifications_deleted', {
+        ids,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     return {
       success: true,
       deleted,
+      ids,
       message: `Deleted ${deleted} notifications`
     };
   } catch (error) {
@@ -558,7 +784,7 @@ const deleteNotifications = async (userId, notificationIds) => {
 const cleanupOldNotifications = async (days = null) => {
   try {
     // Use provided days or get from config
-    const retentionDays = days || config.notifications.retentionDays || 30;
+    const retentionDays = days || config.notifications?.retentionDays || 30;
     
     // Calculate cutoff date
     const cutoffDate = new Date();
@@ -655,52 +881,66 @@ const getNotificationStats = async (userId = null) => {
 };
 
 /**
- * Get user notification settings
+ * Get scheduled message updates for polling
  * @param {number} userId - User ID
- * @returns {Object} User notification settings
+ * @param {Array<string>} messageIds - Array of scheduled message IDs
+ * @returns {Array} Array of updated messages
  */
-const getUserSettings = async (userId) => {
+const getScheduledMessageUpdates = async (userId, messageIds) => {
   try {
-    // Check if user exists
-    const user = await User.findByPk(userId);
-    
-    if (!user) {
-      throw new ApiError('User not found', 404);
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return [];
     }
     
-    // Get settings
-    const userSettings = await Setting.findOne({
+    // Query for notifications related to these message IDs
+    // that were created recently (last 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    const notifications = await Notification.findAll({
       where: {
         userId,
-        category: 'notifications'
+        createdAt: { [Op.gte]: fiveMinutesAgo },
+        metadata: {
+          [Op.and]: [
+            { [Op.ne]: null },
+            Sequelize.where(
+              Sequelize.fn('JSON_EXTRACT', Sequelize.col('metadata'), '$.scheduleId'),
+              { [Op.in]: messageIds }
+            )
+          ]
+        }
+      },
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Format the updates
+    const updates = notifications.map(notification => {
+      try {
+        const metadata = notification.metadata || {};
+        
+        return {
+          id: metadata.scheduleId,
+          status: metadata.status || 'unknown',
+          recipientCount: metadata.recipients || 0,
+          messageId: metadata.messageId,
+          errorMessage: metadata.errorMessage,
+          timestamp: notification.createdAt.toISOString()
+        };
+      } catch (error) {
+        logger.error(`Error formatting notification update: ${error.message}`, {
+          notificationId: notification.id
+        });
+        return null;
       }
-    });
+    }).filter(Boolean); // Remove any null values
     
-    // Return settings or defaults
-    if (userSettings && userSettings.settings) {
-      return userSettings.settings;
-    }
-    
-    // Default notification settings
-    const defaultSettings = {
-      emailAlerts: true,
-      lowBalanceAlerts: true,
-      deliveryReports: true,
-      marketingEmails: false,
-      pushNotifications: true,
-      infoNotifications: true,
-      successNotifications: true,
-      warningNotifications: true,
-      errorNotifications: true
-    };
-    
-    return defaultSettings;
+    return updates;
   } catch (error) {
-    logger.error(`Get user notification settings error: ${error.message}`, {
-      stack: error.stack,
-      userId
+    logger.error(`Get scheduled message updates error: ${error.message}`, {
+      userId,
+      messageIds
     });
-    throw error;
+    return [];
   }
 };
 
@@ -847,13 +1087,15 @@ module.exports = {
   createStatusChangeNotification,
   createPaymentNotification,
   createMessageDeliveryNotification,
+  createScheduledMessageStatusNotification,
   getUserNotifications,
   markAsRead,
   deleteNotifications,
   cleanupOldNotifications,
   getNotificationStats,
+  getScheduledMessageUpdates,
   updateNotificationSettings,
-  getUserSettings,
+  getUserNotificationSettings,
   registerDeviceToken,
   unregisterDeviceToken
 };

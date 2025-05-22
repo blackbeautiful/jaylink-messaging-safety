@@ -97,9 +97,24 @@ const scheduledMessagesSchema = Joi.object({
     })
 });
 
+/**
+ * Schema for checking scheduled message updates
+ */
+const checkScheduledUpdatesSchema = {
+  body: Joi.object().keys({
+    messageIds: Joi.array().items(Joi.string().required()).required()
+      .messages({
+        'array.base': 'Message IDs must be an array',
+        'array.empty': 'At least one message ID is required',
+        'any.required': 'Message IDs are required'
+      })
+  })
+};
+
 module.exports = {
   sendSmsSchema,
   bulkSendSmsSchema,
   messageHistorySchema,
-  scheduledMessagesSchema
+  scheduledMessagesSchema,
+  checkScheduledUpdatesSchema,
 };

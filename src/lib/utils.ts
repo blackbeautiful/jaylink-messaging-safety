@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/lib/utils.ts
 
 import { type ClassValue, clsx } from "clsx"

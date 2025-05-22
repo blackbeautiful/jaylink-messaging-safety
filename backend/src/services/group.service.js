@@ -1,3 +1,4 @@
+// backend/src/services/group.service.js - Fixed version with proper contact relationships
 const { Op } = require('sequelize');
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
@@ -40,7 +41,12 @@ const createGroup = async (userId, groupData) => {
       userId,
     });
 
-    return group;
+    // Return group with contact count
+    const groupWithCount = group.toJSON();
+    return {
+      ...groupWithCount,
+      contactCount: 0
+    };
   } catch (error) {
     logger.error(`Create group error: ${error.message}`, { stack: error.stack, userId, groupData });
     throw error;
@@ -75,25 +81,27 @@ const getGroups = async (userId, options = {}) => {
         ...searchCondition,
       },
       order: [['createdAt', 'DESC']],
-      limit,
-      offset,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
     });
 
-    // Get contact counts for each group
+    // Get contact counts for each group efficiently
     const groupIds = rows.map(group => group.id);
     
-    // Count contacts in each group
-    const contactCounts = await GroupContact.findAll({
-      attributes: [
-        'groupId',
-        [db.sequelize.fn('COUNT', db.sequelize.col('contactId')), 'contactCount']
-      ],
-      where: {
-        groupId: { [Op.in]: groupIds }
-      },
-      group: ['groupId'],
-      raw: true
-    });
+    let contactCounts = [];
+    if (groupIds.length > 0) {
+      contactCounts = await GroupContact.findAll({
+        attributes: [
+          'groupId',
+          [db.sequelize.fn('COUNT', db.sequelize.col('contactId')), 'contactCount']
+        ],
+        where: {
+          groupId: { [Op.in]: groupIds }
+        },
+        group: ['groupId'],
+        raw: true
+      });
+    }
     
     // Create a map of groupId -> contactCount
     const contactCountMap = contactCounts.reduce((map, item) => {
@@ -118,8 +126,8 @@ const getGroups = async (userId, options = {}) => {
       pagination: {
         total: count,
         totalPages,
-        currentPage: page,
-        limit,
+        currentPage: parseInt(page),
+        limit: parseInt(limit),
         hasNext: page < totalPages,
         hasPrev: page > 1,
       },
@@ -131,10 +139,10 @@ const getGroups = async (userId, options = {}) => {
 };
 
 /**
- * Get a single group by ID
+ * Get a single group by ID with contacts
  * @param {number} userId - User ID
  * @param {number} groupId - Group ID
- * @returns {Object} Group data
+ * @returns {Object} Group data with contacts
  */
 const getGroupById = async (userId, groupId) => {
   try {
@@ -143,21 +151,24 @@ const getGroupById = async (userId, groupId) => {
         id: groupId,
         userId,
       },
+      include: [
+        {
+          model: Contact,
+          as: 'contacts',
+          through: { attributes: [] }, // Exclude junction table attributes
+          attributes: ['id', 'name', 'phone', 'email', 'createdAt', 'updatedAt']
+        }
+      ]
     });
 
     if (!group) {
       throw new ApiError('Group not found', 404);
     }
 
-    // Get contact count for the group
-    const contactCount = await GroupContact.count({
-      where: { groupId }
-    });
-
     const groupData = group.toJSON();
     return {
       ...groupData,
-      contactCount
+      contactCount: groupData.contacts ? groupData.contacts.length : 0
     };
   } catch (error) {
     logger.error(`Get group by ID error: ${error.message}`, { stack: error.stack, userId, groupId });
@@ -173,6 +184,8 @@ const getGroupById = async (userId, groupId) => {
  * @returns {Object} Updated group
  */
 const updateGroup = async (userId, groupId, groupData) => {
+  const transaction = await db.sequelize.transaction();
+  
   try {
     // Find group
     const group = await Group.findOne({
@@ -180,6 +193,7 @@ const updateGroup = async (userId, groupId, groupData) => {
         id: groupId,
         userId,
       },
+      transaction
     });
 
     if (!group) {
@@ -194,6 +208,7 @@ const updateGroup = async (userId, groupId, groupData) => {
           name: groupData.name,
           id: { [Op.ne]: groupId }, // Not this group
         },
+        transaction
       });
 
       if (existingGroup) {
@@ -201,13 +216,53 @@ const updateGroup = async (userId, groupId, groupData) => {
       }
     }
 
-    // Update group
-    await group.update(groupData);
+    // Update group basic info
+    await group.update({
+      name: groupData.name,
+      description: groupData.description
+    }, { transaction });
 
-    // Get contact count for the group
+    // Handle contact relationships if contactIds are provided
+    if (Array.isArray(groupData.contactIds)) {
+      // Verify all contacts belong to the user
+      if (groupData.contactIds.length > 0) {
+        const contacts = await Contact.findAll({
+          where: {
+            id: { [Op.in]: groupData.contactIds },
+            userId,
+          },
+          transaction
+        });
+
+        if (contacts.length !== groupData.contactIds.length) {
+          throw new ApiError('One or more contacts not found or do not belong to you', 404);
+        }
+      }
+
+      // Remove all existing associations
+      await GroupContact.destroy({
+        where: { groupId },
+        transaction
+      });
+
+      // Add new associations
+      if (groupData.contactIds.length > 0) {
+        const associations = groupData.contactIds.map(contactId => ({
+          groupId: parseInt(groupId),
+          contactId: parseInt(contactId),
+        }));
+
+        await GroupContact.bulkCreate(associations, { transaction });
+      }
+    }
+
+    // Get updated group with contact count
     const contactCount = await GroupContact.count({
-      where: { groupId }
+      where: { groupId },
+      transaction
     });
+
+    await transaction.commit();
 
     const updatedGroup = group.toJSON();
     return {
@@ -215,6 +270,7 @@ const updateGroup = async (userId, groupId, groupData) => {
       contactCount
     };
   } catch (error) {
+    await transaction.rollback();
     logger.error(`Update group error: ${error.message}`, { stack: error.stack, userId, groupId, groupData });
     throw error;
   }
@@ -227,6 +283,8 @@ const updateGroup = async (userId, groupId, groupData) => {
  * @returns {boolean} Success status
  */
 const deleteGroup = async (userId, groupId) => {
+  const transaction = await db.sequelize.transaction();
+  
   try {
     // Find group
     const group = await Group.findOne({
@@ -234,17 +292,26 @@ const deleteGroup = async (userId, groupId) => {
         id: groupId,
         userId,
       },
+      transaction
     });
 
     if (!group) {
       throw new ApiError('Group not found', 404);
     }
 
-    // Delete group (associated GroupContacts will be deleted by CASCADE)
-    await group.destroy();
+    // Delete group contacts associations first
+    await GroupContact.destroy({
+      where: { groupId },
+      transaction
+    });
 
+    // Delete group
+    await group.destroy({ transaction });
+
+    await transaction.commit();
     return true;
   } catch (error) {
+    await transaction.rollback();
     logger.error(`Delete group error: ${error.message}`, { stack: error.stack, userId, groupId });
     throw error;
   }
@@ -258,6 +325,8 @@ const deleteGroup = async (userId, groupId) => {
  * @returns {Object} Result with added contacts count
  */
 const addContactsToGroup = async (userId, groupId, contactIds) => {
+  const transaction = await db.sequelize.transaction();
+  
   try {
     // Find group
     const group = await Group.findOne({
@@ -265,6 +334,7 @@ const addContactsToGroup = async (userId, groupId, contactIds) => {
         id: groupId,
         userId,
       },
+      transaction
     });
 
     if (!group) {
@@ -277,10 +347,11 @@ const addContactsToGroup = async (userId, groupId, contactIds) => {
         id: { [Op.in]: contactIds },
         userId,
       },
+      transaction
     });
 
     if (contacts.length !== contactIds.length) {
-      throw new ApiError('One or more contacts not found', 404);
+      throw new ApiError('One or more contacts not found or do not belong to you', 404);
     }
 
     // Get existing group-contact associations to avoid duplicates
@@ -290,20 +361,23 @@ const addContactsToGroup = async (userId, groupId, contactIds) => {
         contactId: { [Op.in]: contactIds },
       },
       attributes: ['contactId'],
+      transaction
     });
 
     const existingContactIds = existingAssociations.map(assoc => assoc.contactId);
-    const newContactIds = contactIds.filter(id => !existingContactIds.includes(id));
+    const newContactIds = contactIds.filter(id => !existingContactIds.includes(parseInt(id)));
 
     // Create new associations
     if (newContactIds.length > 0) {
       const associations = newContactIds.map(contactId => ({
-        groupId,
-        contactId,
+        groupId: parseInt(groupId),
+        contactId: parseInt(contactId),
       }));
 
-      await GroupContact.bulkCreate(associations);
+      await GroupContact.bulkCreate(associations, { transaction });
     }
+
+    await transaction.commit();
 
     return {
       group: group.toJSON(),
@@ -312,6 +386,7 @@ const addContactsToGroup = async (userId, groupId, contactIds) => {
       total: contactIds.length,
     };
   } catch (error) {
+    await transaction.rollback();
     logger.error(`Add contacts to group error: ${error.message}`, { stack: error.stack, userId, groupId, contactIds });
     throw error;
   }
@@ -421,8 +496,8 @@ const getContactsInGroup = async (userId, groupId, options = {}) => {
       },
       distinct: true,
       order: [['name', 'ASC']],
-      limit,
-      offset,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
     });
 
     // Calculate pagination details
@@ -434,8 +509,8 @@ const getContactsInGroup = async (userId, groupId, options = {}) => {
       pagination: {
         total: count,
         totalPages,
-        currentPage: page,
-        limit,
+        currentPage: parseInt(page),
+        limit: parseInt(limit),
         hasNext: page < totalPages,
         hasPrev: page > 1,
       },

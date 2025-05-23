@@ -64,7 +64,7 @@ const Navbar = () => {
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2">
-            <span className="font-bold text-2xl text-jaylink-800">
+            <span className="font-bold text-2xl text-jaylink-800 dark:text-white">
               Jay<span className="text-jaylink-600">Link</span>
             </span>
           </Link>
@@ -87,7 +87,7 @@ const Navbar = () => {
           </nav>
 
           <div className="hidden md:flex items-center space-x-4">
-            <Link to="/">
+            <Link to="/login">
               <Button variant="outline" className="border-jaylink-200 text-jaylink-700 hover:bg-jaylink-50">
                 Log in
               </Button>

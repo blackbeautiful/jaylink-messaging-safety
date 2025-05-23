@@ -1,6 +1,6 @@
 // backend/src/models/user.model.js
 /**
- * User model
+ * User model with optimized indexes
  * @param {Object} sequelize - Sequelize instance
  * @param {Object} DataTypes - Sequelize data types
  * @returns {Object} User model
@@ -31,7 +31,7 @@ module.exports = (sequelize, DataTypes) => {
     email: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      unique: true,
+      unique: true, // This creates a unique constraint/index automatically
       validate: {
         isEmail: true,
       },
@@ -78,19 +78,23 @@ module.exports = (sequelize, DataTypes) => {
     },
   }, {
     tableName: 'users',
+    // Minimal essential indexes only
     indexes: [
+      // Only add indexes that are absolutely necessary
+      // Email unique constraint is handled by unique: true above
       {
-        name: 'idx_email',
-        fields: ['email'],
+        name: 'idx_user_status_role', // Composite index for common queries
+        fields: ['status', 'role'],
       },
       {
-        name: 'idx_status',
-        fields: ['status'],
+        name: 'idx_user_created_at', // For sorting/pagination
+        fields: ['createdAt'],
       },
+      // Remove individual email and status indexes since we have composite
     ],
   });
 
-  // Define associations - modified to handle missing models gracefully
+  // Define associations - keep existing association logic
   User.associate = (models) => {
     // Only add associations for models that exist
     if (models.Contact) {

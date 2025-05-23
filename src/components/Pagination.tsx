@@ -5,9 +5,19 @@ interface PaginationProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  totalItems?: number;
+  itemsPerPage?: number;
+  showInfo?: boolean;
 }
 
-const Pagination = ({ currentPage, totalPages, onPageChange }: PaginationProps) => {
+const Pagination = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange, 
+  totalItems, 
+  itemsPerPage,
+  showInfo = true 
+}: PaginationProps) => {
   if (totalPages <= 1) return null;
 
   const getPageNumbers = () => {
@@ -59,17 +69,41 @@ const Pagination = ({ currentPage, totalPages, onPageChange }: PaginationProps) 
     return pages;
   };
 
+  // Calculate range information
+  const getItemRange = () => {
+    if (!totalItems || !itemsPerPage) return null;
+    
+    const start = (currentPage - 1) * itemsPerPage + 1;
+    const end = Math.min(currentPage * itemsPerPage, totalItems);
+    
+    return { start, end };
+  };
+
+  const itemRange = getItemRange();
+
   return (
-    <div className="flex items-center justify-between border-t pt-4">
-      <div className="text-sm text-gray-600 dark:text-gray-400">
-        Page {currentPage} of {totalPages}
-      </div>
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4">
+      {showInfo && (
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          {itemRange ? (
+            <>
+              Showing {itemRange.start} to {itemRange.end} of {totalItems} results
+            </>
+          ) : (
+            <>
+              Page {currentPage} of {totalPages}
+            </>
+          )}
+        </div>
+      )}
+      
       <div className="flex items-center space-x-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
+          className="h-8"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           Previous
@@ -108,6 +142,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }: PaginationProps) 
           size="sm"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
+          className="h-8"
         >
           Next
           <ChevronRight className="h-4 w-4 ml-1" />
@@ -117,4 +152,4 @@ const Pagination = ({ currentPage, totalPages, onPageChange }: PaginationProps) 
   );
 };
 
-export default Pagination; 
+export default Pagination;

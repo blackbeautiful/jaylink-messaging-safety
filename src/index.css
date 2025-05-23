@@ -1,3 +1,5 @@
+/* Enhanced styles for settings form and application-wide improvements */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -42,6 +44,11 @@
     --sidebar-accent-foreground: 240 6% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217 91% 60%;
+
+    /* Settings specific variables */
+    --settings-card-padding: 1.5rem;
+    --settings-form-spacing: 1.5rem;
+    --settings-switch-padding: 1rem;
   }
 
   .dark {
@@ -84,6 +91,125 @@
   }
 }
 
+/* Enhanced High Contrast Mode */
+.high-contrast {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --primary: 0 0% 0%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --border: 0 0% 0%;
+  --input: 0 0% 95%;
+  --ring: 0 0% 0%;
+  --muted: 0 0% 90%;
+  --muted-foreground: 0 0% 20%;
+  --accent: 0 0% 85%;
+  --accent-foreground: 0 0% 0%;
+  
+  /* Enhanced contrast for interactive elements */
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 0 0% 0%;
+  --sidebar-border: 0 0% 0%;
+  --sidebar-accent: 0 0% 90%;
+  --sidebar-accent-foreground: 0 0% 0%;
+}
+
+.dark.high-contrast {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 85%;
+  --secondary-foreground: 0 0% 0%;
+  --card: 0 0% 5%;
+  --card-foreground: 0 0% 100%;
+  --border: 0 0% 100%;
+  --input: 0 0% 10%;
+  --ring: 0 0% 100%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 85%;
+  --accent: 0 0% 20%;
+  --accent-foreground: 0 0% 100%;
+  
+  /* Enhanced contrast for sidebar in dark mode */
+  --sidebar-background: 0 0% 0%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-border: 0 0% 50%;
+  --sidebar-accent: 0 0% 15%;
+  --sidebar-accent-foreground: 0 0% 100%;
+}
+
+/* Enhanced Compact View Mode */
+.compact-view {
+  --radius: 0.375rem;
+  --settings-card-padding: 1rem;
+  --settings-form-spacing: 1rem;
+  --settings-switch-padding: 0.75rem;
+}
+
+/* Apply compact spacing globally */
+.compact-view [class*="p-4"] {
+  padding: 0.75rem !important;
+}
+
+.compact-view [class*="p-6"] {
+  padding: 1rem !important;
+}
+
+.compact-view [class*="p-8"] {
+  padding: 1.25rem !important;
+}
+
+/* Override spacing utilities without using @apply */
+.compact-view [class*="space-y-4"] > * + * {
+  margin-top: 0.75rem !important;
+}
+
+.compact-view [class*="space-y-6"] > * + * {
+  margin-top: 1rem !important;
+}
+
+.compact-view [class*="space-y-8"] > * + * {
+  margin-top: 1.25rem !important;
+}
+
+.compact-view .text-xl {
+  font-size: 1.125rem !important;
+  line-height: 1.5rem !important;
+}
+
+.compact-view .text-2xl {
+  font-size: 1.25rem !important;
+  line-height: 1.75rem !important;
+}
+
+.compact-view .text-lg {
+  font-size: 1rem !important;
+  line-height: 1.5rem !important;
+}
+
+/* Compact sidebar adjustments */
+.compact-view aside {
+  width: 240px !important;
+}
+
+.compact-view .md\\:ml-64 {
+  margin-left: 240px !important;
+}
+
+/* Reduced Motion Mode */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -96,6 +222,198 @@
 }
 
 @layer components {
+  /* Settings Form Components */
+  .settings-container {
+    @apply w-full max-w-4xl mx-auto;
+  }
+
+  .settings-card {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-subtle border border-gray-200 dark:border-gray-700;
+    padding: var(--settings-card-padding);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .high-contrast .settings-card {
+    @apply border-2 shadow-lg;
+    border-color: hsl(var(--border));
+  }
+
+  .settings-card-title {
+    @apply text-lg font-semibold text-gray-900 dark:text-white mb-6;
+  }
+
+  .compact-view .settings-card-title {
+    @apply text-base mb-4;
+  }
+
+  .settings-form {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  .settings-form > * + * {
+    margin-top: 1.5rem;
+  }
+
+  .compact-view .settings-form > * + * {
+    margin-top: 1rem;
+  }
+
+  .settings-switch-item {
+    @apply flex flex-row items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 transition-colors;
+    padding: var(--settings-switch-padding);
+  }
+
+  .settings-switch-item:hover {
+    @apply bg-gray-50 dark:bg-gray-700/50;
+  }
+
+  .high-contrast .settings-switch-item {
+    @apply border-2;
+    border-color: hsl(var(--border));
+  }
+
+  .high-contrast .settings-switch-item:hover {
+    @apply bg-gray-100 dark:bg-gray-800;
+  }
+
+  .settings-switch-content {
+    @apply space-y-0.5 flex-1 pr-4;
+  }
+
+  .settings-switch-label {
+    @apply text-base font-medium;
+  }
+
+  .compact-view .settings-switch-label {
+    @apply text-sm;
+  }
+
+  .settings-submit-btn {
+    @apply bg-jaylink-600 hover:bg-jaylink-700 text-white font-medium px-6 py-2 rounded-md transition-colors;
+  }
+
+  .high-contrast .settings-submit-btn {
+    @apply border-2 border-jaylink-600 shadow-md;
+  }
+
+  /* Theme Selection Components */
+  .theme-radio-group {
+    @apply grid grid-cols-3 gap-4;
+  }
+
+  .compact-view .theme-radio-group {
+    @apply gap-3;
+  }
+
+  .theme-option {
+    @apply cursor-pointer;
+  }
+
+  .theme-option[data-state="checked"] .theme-option-content {
+    @apply border-jaylink-600 text-jaylink-600 dark:border-jaylink-400 dark:text-jaylink-400;
+  }
+
+  .high-contrast .theme-option[data-state="checked"] .theme-option-content {
+    @apply border-2 shadow-md;
+  }
+
+  .theme-option-content {
+    @apply flex flex-col items-center justify-center rounded-md border-2 border-muted p-4 hover:border-jaylink-400 transition-colors;
+  }
+
+  .compact-view .theme-option-content {
+    @apply p-3;
+  }
+
+  .light-theme .theme-option-content {
+    @apply bg-white text-gray-900;
+  }
+
+  .dark-theme .theme-option-content {
+    @apply bg-gray-900 text-white;
+  }
+
+  .system-theme .theme-option-content {
+    @apply bg-gray-50 dark:bg-gray-800;
+  }
+
+  .theme-icon {
+    @apply mb-3 h-6 w-6;
+  }
+
+  .compact-view .theme-icon {
+    @apply mb-2 h-5 w-5;
+  }
+
+  .theme-label {
+    @apply text-sm font-medium;
+  }
+
+  .compact-view .theme-label {
+    @apply text-xs;
+  }
+
+  /* Enhanced Focus States for Accessibility */
+  .high-contrast input:focus,
+  .high-contrast button:focus,
+  .high-contrast [role="switch"]:focus {
+    @apply ring-4 ring-offset-2;
+    ring-color: hsl(var(--ring));
+  }
+
+  /* Sidebar Enhancements */
+  .high-contrast aside {
+    @apply border-2;
+    border-color: hsl(var(--sidebar-border));
+  }
+
+  .high-contrast .sidebar-link {
+    @apply border border-transparent;
+  }
+
+  .high-contrast .sidebar-link:hover,
+  .high-contrast .sidebar-link[aria-current="page"] {
+    @apply border-gray-800 dark:border-gray-200;
+  }
+
+  /* Form Input Enhancements */
+  .high-contrast input,
+  .high-contrast textarea,
+  .high-contrast select {
+    @apply border-2;
+    border-color: hsl(var(--border));
+  }
+
+  .high-contrast input:focus,
+  .high-contrast textarea:focus,
+  .high-contrast select:focus {
+    @apply ring-2 ring-offset-1;
+  }
+
+  /* Tab Navigation Enhancements */
+  .high-contrast [role="tablist"] [role="tab"] {
+    @apply border border-transparent;
+  }
+
+  .high-contrast [role="tablist"] [role="tab"][aria-selected="true"] {
+    @apply border-gray-800 dark:border-gray-200 bg-white dark:bg-gray-800;
+  }
+
+  /* Switch Component Enhancements */
+  .high-contrast [role="switch"] {
+    @apply border-2;
+  }
+
+  .high-contrast [role="switch"][data-state="checked"] {
+    @apply bg-black dark:bg-white;
+  }
+
+  .high-contrast [role="switch"][data-state="unchecked"] {
+    @apply bg-gray-300 dark:bg-gray-600;
+  }
+
+  /* Glass effect and other utility classes */
   .glass-effect {
     @apply bg-white/40 dark:bg-black/20 backdrop-blur-lg border border-white/20 dark:border-gray-800/30 shadow-glass;
   }
@@ -131,5 +449,54 @@
   
   .subtle-ring {
     @apply ring-1 ring-gray-100 dark:ring-gray-800;
+  }
+
+  /* Additional responsive improvements */
+  @media (max-width: 768px) {
+    .compact-view .theme-radio-group {
+      display: grid;
+      grid-template-columns: repeat(1, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+    
+    .compact-view .settings-card {
+      padding: 0.75rem;
+    }
+    
+    .compact-view .settings-form > * + * {
+      margin-top: 0.75rem;
+    }
+  }
+
+  /* Print styles for high contrast */
+  @media print {
+    .high-contrast * {
+      color: black !important;
+      background-color: white !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+
+  /* Improved animation performance */
+  .reduce-motion .hover-lift {
+    @apply transform-none;
+  }
+
+  .reduce-motion .page-transition-enter-active,
+  .reduce-motion .page-transition-exit-active {
+    @apply transition-none;
+  }
+
+  /* Enhanced loading states */
+  .settings-submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .high-contrast .settings-submit-btn:disabled {
+    opacity: 0.7;
+    background-color: rgb(156 163 175);
+    border-color: rgb(156 163 175);
   }
 }

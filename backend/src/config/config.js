@@ -27,6 +27,7 @@ const config = {
     name: process.env.DB_NAME || 'jaylink_db',
     // Handle Railway's database URL format if provided
     url: process.env.DATABASE_URL || null,
+    timezone: process.env.DB_TIMEZONE || process.env.APP_TIMEZONE,
   },
 
   // JWT Authentication configuration
@@ -183,6 +184,9 @@ const config = {
     maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS, 10) || 5,
     lockoutTime: parseInt(process.env.ACCOUNT_LOCKOUT_TIME, 10) || 30, // 30 minutes
   },
+
+  timezone: process.env.APP_TIMEZONE || 'Africa/Lagos',
+
 
   // CORS origins (multiple frontend URLs)
   corsOrigins: process.env.CORS_ORIGIN

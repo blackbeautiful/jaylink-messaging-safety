@@ -1,22 +1,22 @@
-import { useEffect } from "react";
-import { motion } from "framer-motion";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import AuthForm from "@/components/AuthForm";
-import LogoImg from "@/assets/logo.svg";
-import { useAuth } from "@/contexts/AuthContext";
-import { Loader2 } from "lucide-react";
+import { useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import AuthForm from '@/components/AuthForm';
+import LogoImg from '@/assets/logo.svg';
+import { useAuth } from '@/contexts/AuthContext';
+import { Loader2 } from 'lucide-react';
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, loading } = useAuth();
-  
+
   // Get the redirect path from location state, or default to dashboard
-  const from = location.state?.from || "/dashboard";
+  const from = location.state?.from || '/dashboard';
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    
+
     // If user is already authenticated, redirect to dashboard or intended destination
     if (isAuthenticated && !loading) {
       navigate(from, { replace: true });
@@ -36,10 +36,13 @@ const Login = () => {
           {/* Logo */}
           <div className="text-center mb-6">
             <Link to="/" className="inline-block">
-              <img src={LogoImg} alt="Logo" width={120} height={40} />
+              {/* <img src={LogoImg} alt="Logo" width={120} height={40} /> */}
+              <span className="font-bold text-3xl text-jaylink-800 dark:text-white">
+                Jay<span className="text-jaylink-600">Link</span>
+              </span>
             </Link>
           </div>
-          
+
           {/* Auth form card */}
           <div className="bg-white dark:bg-gray-800 shadow-elevated rounded-2xl p-8">
             {/* Display any success messages passed via location state */}
@@ -48,7 +51,7 @@ const Login = () => {
                 {location.state.message}
               </div>
             )}
-            
+
             <AuthForm type="login" redirectPath={from} />
           </div>
         </div>

@@ -1,11 +1,11 @@
 
 import { useEffect } from "react";
 import { motion } from "framer-motion";
-import Navbar from "@/components/Navbar";
-import Hero from "@/components/Hero";
-import Features from "@/components/Features";
-import Pricing from "@/components/PricingCard";
-import Footer from "@/components/Footer";
+import Navbar from "@/components/home/Navbar";
+import Hero from "@/components/home/Hero";
+import Features from "@/components/home/Features";
+import Pricing from "@/components/home/PricingCard";
+import Footer from "@/components/home/Footer";
 
 const Index = () => {
   useEffect(() => {

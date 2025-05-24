@@ -149,7 +149,7 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
       { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
       { name: "Groups", icon: <Users size={20} />, path: "/groups" },
       { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
-      { name: "Settings", icon: <Settings size={20} />, path: "/settings" },
+      { name: "History", icon: <Settings size={20} />, path: "/sms/history" },
     ],
     []
   );

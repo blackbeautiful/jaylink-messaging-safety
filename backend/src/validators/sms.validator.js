@@ -1,8 +1,8 @@
-// backend/src/validators/sms.validator.js - Complete SMS validation schemas
+// backend/src/validators/sms.validator.js - Fixed SMS validation schemas
 const Joi = require('joi');
 
 /**
- * Send SMS validation schema
+ * Send SMS validation schema - Fixed for scheduled messages
  */
 const sendSmsSchema = Joi.object({
   recipients: Joi.string().required()
@@ -20,15 +20,26 @@ const sendSmsSchema = Joi.object({
     .messages({
       'string.max': 'Sender ID cannot exceed 11 characters'
     }),
-  scheduled: Joi.date().iso().min('now').allow('', null)
-    .messages({
-      'date.min': 'Scheduled time must be in the future',
-      'date.format': 'Scheduled time must be in ISO format'
-    })
+  // Fixed: Made scheduled validation more flexible
+  scheduled: Joi.alternatives().try(
+    Joi.date().iso().min('now'),
+    Joi.string().isoDate().custom((value, helpers) => {
+      const date = new Date(value);
+      if (date <= new Date()) {
+        return helpers.error('date.min');
+      }
+      return date.toISOString();
+    }),
+    Joi.allow('', null)
+  ).messages({
+    'date.min': 'Scheduled time must be in the future',
+    'date.format': 'Scheduled time must be in ISO format',
+    'string.isoDate': 'Scheduled time must be in ISO format'
+  })
 });
 
 /**
- * Bulk send SMS validation schema
+ * Bulk send SMS validation schema - Fixed
  */
 const bulkSendSmsSchema = Joi.object({
   message: Joi.string().required().max(1600)
@@ -41,11 +52,22 @@ const bulkSendSmsSchema = Joi.object({
     .messages({
       'string.max': 'Sender ID cannot exceed 11 characters'
     }),
-  scheduled: Joi.date().iso().min('now').allow('', null)
-    .messages({
-      'date.min': 'Scheduled time must be in the future',
-      'date.format': 'Scheduled time must be in ISO format'
-    })
+  // Fixed: Same scheduling fix as above
+  scheduled: Joi.alternatives().try(
+    Joi.date().iso().min('now'),
+    Joi.string().isoDate().custom((value, helpers) => {
+      const date = new Date(value);
+      if (date <= new Date()) {
+        return helpers.error('date.min');
+      }
+      return date.toISOString();
+    }),
+    Joi.allow('', null)
+  ).messages({
+    'date.min': 'Scheduled time must be in the future',
+    'date.format': 'Scheduled time must be in ISO format',
+    'string.isoDate': 'Scheduled time must be in ISO format'
+  })
 });
 
 /**
@@ -107,6 +129,11 @@ const scheduledMessagesSchema = Joi.object({
   type: Joi.string().valid('sms', 'voice', 'audio').allow('', null)
     .messages({
       'any.only': 'Type must be one of sms, voice, or audio'
+    }),
+  // Added search support for scheduled messages
+  search: Joi.string().max(500).allow('', null)
+    .messages({
+      'string.max': 'Search term cannot exceed 500 characters'
     })
 });
 

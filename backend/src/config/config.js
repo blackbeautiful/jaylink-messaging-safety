@@ -1,4 +1,4 @@
-// backend/src/config/config.js
+// backend/src/config/config.js - Fixed SMS Provider Configuration
 require('dotenv').config();
 
 /**
@@ -45,46 +45,49 @@ const config = {
     directory: process.env.UPLOAD_DIR || 'uploads',
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10485760, // 10MB
     maxCsvSize: parseInt(process.env.MAX_CSV_SIZE, 10) || 5242880, // 5MB
-    allowedAudioTypes: (process.env.ALLOWED_AUDIO_TYPES || 'audio/mpeg,audio/wav,audio/ogg').split(
-      ','
-    ),
-    allowedCsvTypes: (process.env.ALLOWED_CSV_TYPES || 'text/csv,application/csv,text/plain').split(
-      ','
-    ),
+    allowedAudioTypes: (process.env.ALLOWED_AUDIO_TYPES || 'audio/mpeg,audio/wav,audio/ogg').split(','),
+    allowedCsvTypes: (process.env.ALLOWED_CSV_TYPES || 'text/csv,application/csv,text/plain').split(','),
   },
 
-  // SMS Provider configuration
+  // SMS Provider configuration - FIXED for SMSProvider.com.ng
   smsProvider: {
     provider: process.env.SMS_PROVIDER || 'smsprovider.com.ng',
-    apiKey: process.env.SMS_PROVIDER_API_KEY || 'your_sms_api_key',
-    baseUrl: process.env.SMS_PROVIDER_BASE_URL || 'https://api.smsprovider.com.ng/api/v1',
+    
+    // SMSProvider.com.ng uses username/password authentication (not API key)
+    username: process.env.SMS_PROVIDER_USERNAME || 'your_sms_username',
+    password: process.env.SMS_PROVIDER_PASSWORD || 'your_sms_password',
+    
+    // Base URL for SMSProvider.com.ng
+    baseUrl: process.env.SMS_PROVIDER_BASE_URL || 'https://customer.smsprovider.com.ng',
+    
+    // Default sender ID
     defaultSender: process.env.SMS_PROVIDER_DEFAULT_SENDER || 'JayLink',
+    
     // Pricing configuration (in kobo per segment)
     pricing: {
       localSms: parseInt(process.env.SMS_PRICING_LOCAL, 10) || 500, // 5 naira per local SMS
-      internationalSms: parseInt(process.env.SMS_PRICING_INTERNATIONAL, 10) || 1000, // 10 naira per international SMS
+      internationalSms: parseInt(process.env.SMS_PRICING_INTERNATIONAL, 10) || 1500, // 15 naira per international SMS
     },
-    // Provider-specific configuration
-    options: {
-      username: process.env.SMS_PROVIDER_USERNAME,
-      accountId: process.env.SMS_PROVIDER_ACCOUNT_ID,
-    },
-    // Backup provider if configured
+    
+    // Backup provider configuration (Termii)
     backup: {
       enabled: process.env.SMS_BACKUP_PROVIDER_ENABLED === 'true',
-      provider: process.env.SMS_BACKUP_PROVIDER,
-      apiKey: process.env.SMS_BACKUP_PROVIDER_API_KEY,
-      baseUrl: process.env.SMS_BACKUP_PROVIDER_BASE_URL,
+      provider: process.env.SMS_BACKUP_PROVIDER || 'termii',
+      apiKey: process.env.TERMII_API_KEY || 'your_termii_api_key',
+      baseUrl: process.env.TERMII_BASE_URL || 'https://api.ng.termii.com',
     },
+    
+    // Legacy fields for backward compatibility (will be ignored)
+    apiKey: process.env.SMS_PROVIDER_API_KEY || 'legacy_field_ignored',
   },
 
   // Voice Provider configuration
   voiceProvider: {
-    provider: process.env.VOICE_PROVIDER || 'default',
-    apiKey: process.env.VOICE_PROVIDER_API_KEY || 'your_voice_api_key',
-    baseUrl: process.env.VOICE_PROVIDER_BASE_URL || 'https://api.voiceprovider.com/v1',
-    accountSid: process.env.VOICE_PROVIDER_ACCOUNT_SID || 'your_account_sid',
-    authToken: process.env.VOICE_PROVIDER_AUTH_TOKEN || 'your_auth_token',
+    provider: process.env.VOICE_PROVIDER || 'smsprovider.com.ng',
+    username: process.env.VOICE_PROVIDER_USERNAME || process.env.SMS_PROVIDER_USERNAME,
+    password: process.env.VOICE_PROVIDER_PASSWORD || process.env.SMS_PROVIDER_PASSWORD,
+    baseUrl: process.env.VOICE_PROVIDER_BASE_URL || 'https://customer.smsprovider.com.ng',
+    defaultCallerId: process.env.VOICE_PROVIDER_DEFAULT_CALLER || '2347000000000',
   },
 
   // Email configuration
@@ -107,7 +110,6 @@ const config = {
     callbackUrl: process.env.PAYSTACK_CALLBACK_URL || 'https://jaylink.com/api/payments/verify',
     webhookSecret: process.env.PAYSTACK_WEBHOOK_SECRET || 'your_paystack_webhook_secret',
     testMode: process.env.PAYMENT_TEST_MODE === 'true' || process.env.NODE_ENV !== 'production',
-    // Channels to accept payment through
     channels: (process.env.PAYSTACK_CHANNELS || 'card,bank_transfer,ussd').split(','),
   },
 
@@ -156,7 +158,7 @@ const config = {
     },
     retryStrategy: function (times) {
       if (times > 10) {
-        logger.error('Redis connection failed too many times. Giving up.');
+        console.error('Redis connection failed too many times. Giving up.');
         return null; // Ends reconnecting after 10 attempts
       }
       return Math.min(times * 100, 3000); // Time between retries with exponential backoff
@@ -187,7 +189,6 @@ const config = {
 
   timezone: process.env.APP_TIMEZONE || 'Africa/Lagos',
 
-
   // CORS origins (multiple frontend URLs)
   corsOrigins: process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',')
@@ -210,7 +211,8 @@ if (config.env === 'production') {
   const requiredEnvVars = [
     'JWT_SECRET',
     'JWT_REFRESH_SECRET',
-    'SMS_PROVIDER_API_KEY',
+    'SMS_PROVIDER_USERNAME', // Changed from SMS_PROVIDER_API_KEY
+    'SMS_PROVIDER_PASSWORD', // Added required password
     'PAYSTACK_SECRET_KEY',
     'PAYSTACK_WEBHOOK_SECRET',
   ];
@@ -219,6 +221,16 @@ if (config.env === 'production') {
   if (missingVars.length > 0) {
     console.warn(`Missing critical environment variables in production: ${missingVars.join(', ')}`);
     console.warn('Please set these variables for security and proper functioning.');
+  }
+
+  // Additional SMS provider validation
+  if (!process.env.SMS_PROVIDER_USERNAME || !process.env.SMS_PROVIDER_PASSWORD) {
+    console.warn('SMS Provider credentials (username/password) are required for SMSProvider.com.ng integration');
+  }
+
+  // Backup provider validation
+  if (process.env.SMS_BACKUP_PROVIDER_ENABLED === 'true' && !process.env.TERMII_API_KEY) {
+    console.warn('Termii API key is required when backup SMS provider is enabled');
   }
 }
 

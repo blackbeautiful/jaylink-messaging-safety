@@ -1,4 +1,4 @@
-// backend/src/workers/index.js
+// backend/src/workers/index.js - Fixed worker initialization for scheduled messages
 const logger = require('../config/logger');
 const Queue = require('../utils/queue.util');
 const smsService = require('../services/sms.service');
@@ -16,11 +16,6 @@ try {
   smsQueue = new Queue('smsMessages');
   scheduledQueue = new Queue('scheduledMessages');
   maintenanceQueue = new Queue('systemMaintenance');
-  
-  logger.info('Queue "pushNotifications" initialized');
-  logger.info('Queue "smsMessages" initialized');
-  logger.info('Queue "scheduledMessages" initialized');
-  logger.info('Queue "systemMaintenance" initialized');
 } catch (error) {
   logger.error(`Failed to initialize queues: ${error.message}`, { stack: error.stack });
 }
@@ -28,7 +23,7 @@ try {
 // Store worker references for graceful shutdown
 let monitoringWorker = null;
 let backupScheduler = null;
-let scheduledMessageInterval = null;
+let scheduledProcessorInterval = null;
 
 /**
  * Initialize all worker processes
@@ -39,16 +34,9 @@ const initializeWorkers = () => {
   try {
     // Initialize Firebase for push notifications if enabled
     if (config.notifications?.pushEnabled) {
-      try {
-        const firebaseInitialized = firebase.initialize();
-        if (!firebaseInitialized && config.env === 'production') {
-          logger.warn('Firebase initialization failed in production - push notifications will not work');
-        }
-      } catch (firebaseError) {
-        logger.error(`Firebase initialization error: ${firebaseError.message}`);
-        if (config.env === 'development') {
-          logger.info('Development mode: Using mock Firebase implementation');
-        }
+      const firebaseInitialized = firebase.initialize();
+      if (!firebaseInitialized && config.env === 'production') {
+        logger.warn('Firebase initialization failed in production - push notifications will not work');
       }
     }
     
@@ -58,60 +46,33 @@ const initializeWorkers = () => {
       
       // Try to re-initialize
       try {
-        if (!pushQueue) {
-          pushQueue = new Queue('pushNotifications');
-          logger.info('Queue "pushNotifications" re-initialized');
-        }
-        if (!smsQueue) {
-          smsQueue = new Queue('smsMessages');
-          logger.info('Queue "smsMessages" re-initialized');
-        }
-        if (!scheduledQueue) {
-          scheduledQueue = new Queue('scheduledMessages');
-          logger.info('Queue "scheduledMessages" re-initialized');
-        }
-        if (!maintenanceQueue) {
-          maintenanceQueue = new Queue('systemMaintenance');
-          logger.info('Queue "systemMaintenance" re-initialized');
-        }
+        if (!pushQueue) pushQueue = new Queue('pushNotifications');
+        if (!smsQueue) smsQueue = new Queue('smsMessages');
+        if (!scheduledQueue) scheduledQueue = new Queue('scheduledMessages');
+        if (!maintenanceQueue) maintenanceQueue = new Queue('systemMaintenance');
       } catch (queueError) {
         logger.error(`Failed to re-initialize queues: ${queueError.message}`);
       }
     }
     
     // Set up maintenance tasks if queue is available
-    if (maintenanceQueue && maintenanceQueue.isInitialized) {
+    if (maintenanceQueue) {
       setupMaintenanceTasks();
-    } else {
-      logger.warn('Maintenance queue not available, some maintenance tasks will not run');
     }
     
-    // Set up scheduled message processor if queue is available
-    if (scheduledQueue && scheduledQueue.isInitialized) {
-      setupScheduledMessageProcessor();
-    } else {
-      logger.warn('Scheduled queue not available, using fallback processor');
-      setupFallbackScheduledProcessor();
-    }
+    // Set up scheduled message processor - FIXED
+    setupScheduledMessageProcessor();
     
     // Initialize system monitoring worker
     if (config.monitoring?.enabled) {
-      try {
-        logger.info('Initializing system monitoring worker');
-        monitoringWorker = initMonitoringWorker();
-      } catch (monitoringError) {
-        logger.error(`Failed to initialize monitoring worker: ${monitoringError.message}`);
-      }
+      logger.info('Initializing system monitoring worker');
+      monitoringWorker = initMonitoringWorker();
     }
     
     // Initialize database backup scheduler
     if (config.backup?.enabled !== false) {
-      try {
-        logger.info('Initializing database backup scheduler');
-        backupScheduler = scheduleBackups();
-      } catch (backupError) {
-        logger.error(`Failed to initialize backup scheduler: ${backupError.message}`);
-      }
+      logger.info('Initializing database backup scheduler');
+      backupScheduler = scheduleBackups();
     }
     
     logger.info('Background workers initialized successfully');
@@ -131,22 +92,14 @@ const setupMaintenanceTasks = () => {
       repeat: {
         cron: '0 2 * * *', // Run at 2 AM every day
       },
-      removeOnComplete: 5,
-      removeOnFail: 10
+      removeOnComplete: true
     });
     
     // Process cleanup job
     maintenanceQueue.process('cleanupOldNotifications', async (job) => {
       logger.info('Running old notification cleanup job');
       try {
-        // Check if notification service is available
-        if (!notificationService || !notificationService.cleanupOldNotifications) {
-          logger.warn('Notification service not available for cleanup');
-          return { success: false, reason: 'Service not available' };
-        }
-        
         const result = await notificationService.cleanupOldNotifications();
-        logger.info(`Cleaned up ${result.deletedCount || 0} old notifications`);
         return result;
       } catch (error) {
         logger.error(`Notification cleanup error: ${error.message}`);
@@ -160,8 +113,7 @@ const setupMaintenanceTasks = () => {
         repeat: {
           cron: config.backup?.cronSchedule || '0 1 * * *', // Run at 1 AM every day by default
         },
-        removeOnComplete: 3,
-        removeOnFail: 5
+        removeOnComplete: true
       });
       
       // Process database backup job
@@ -169,12 +121,6 @@ const setupMaintenanceTasks = () => {
         logger.info('Running scheduled database backup job');
         try {
           const result = await backupDatabase(false);
-          if (result.status === 'success') {
-            logger.info(`Database backup completed: ${result.filePath}`);
-          } else {
-            logger.error(`Database backup failed: ${result.error}`);
-            throw new Error(result.error);
-          }
           return result;
         } catch (error) {
           logger.error(`Database backup error: ${error.message}`);
@@ -183,39 +129,6 @@ const setupMaintenanceTasks = () => {
       });
     }
     
-    // Set up system health check job
-    maintenanceQueue.queue.add('systemHealthCheck', {}, {
-      repeat: {
-        cron: '*/15 * * * *', // Run every 15 minutes
-      },
-      removeOnComplete: 10,
-      removeOnFail: 5
-    });
-    
-    // Process system health check job
-    maintenanceQueue.process('systemHealthCheck', async (job) => {
-      logger.debug('Running system health check job');
-      try {
-        const healthData = {
-          timestamp: new Date(),
-          memory: process.memoryUsage(),
-          uptime: process.uptime(),
-          cpu: process.cpuUsage()
-        };
-        
-        // Log health data if memory usage is high
-        const memoryUsageMB = healthData.memory.heapUsed / 1024 / 1024;
-        if (memoryUsageMB > 500) { // Alert if using more than 500MB
-          logger.warn(`High memory usage detected: ${memoryUsageMB.toFixed(2)}MB`);
-        }
-        
-        return healthData;
-      } catch (error) {
-        logger.error(`System health check error: ${error.message}`);
-        return { error: error.message };
-      }
-    });
-    
     logger.info('Maintenance tasks scheduled successfully');
   } catch (error) {
     logger.error(`Failed to set up maintenance tasks: ${error.message}`);
@@ -223,44 +136,67 @@ const setupMaintenanceTasks = () => {
 };
 
 /**
- * Set up scheduled message processor using queue
+ * Set up scheduled message processor - FIXED
  */
 const setupScheduledMessageProcessor = () => {
   try {
-    // Set up recurring job to process scheduled messages
-    scheduledQueue.queue.add('processScheduledMessages', {}, {
-      repeat: {
-        every: 60 * 1000, // Run every minute
-      },
-      removeOnComplete: 5,
-      removeOnFail: 10
-    });
+    // Use both queue-based and interval-based processing for reliability
     
-    // Process scheduled messages job
-    scheduledQueue.process('processScheduledMessages', async (job) => {
-      logger.debug('Running scheduled message processor job');
+    // Queue-based processing (primary)
+    if (scheduledQueue) {
+      // Set up recurring job to process scheduled messages
+      scheduledQueue.queue.add('processScheduledMessages', {}, {
+        repeat: {
+          every: 30 * 1000, // Run every 30 seconds
+        },
+        removeOnComplete: 5, // Keep last 5 completed jobs
+        removeOnFail: 10,    // Keep last 10 failed jobs
+      });
+      
+      // Process scheduled messages job
+      scheduledQueue.process('processScheduledMessages', async (job) => {
+        logger.debug('Running scheduled message processor job (queue-based)');
+        try {
+          const result = await smsService.processScheduledMessages();
+          if (result.processed > 0) {
+            logger.info(`Queue processor: ${result.processed} messages processed (${result.success} success, ${result.failed} failed)`);
+          }
+          return result;
+        } catch (error) {
+          logger.error(`Scheduled message processor error (queue-based): ${error.message}`);
+          throw error; // Let Bull handle retries
+        }
+      });
+      
+      logger.info('Queue-based scheduled message processor initialized');
+    }
+    
+    // Interval-based processing (fallback)
+    const processingInterval = 45 * 1000; // 45 seconds (offset from queue)
+    scheduledProcessorInterval = setInterval(async () => {
       try {
-        // Check if SMS service is available
-        if (!smsService || !smsService.processScheduledMessages) {
-          logger.debug('SMS service not available for scheduled message processing');
-          return { processed: 0, success: 0, failed: 0 };
-        }
-        
+        logger.debug('Running scheduled message processor (interval-based)');
         const result = await smsService.processScheduledMessages();
-        
         if (result.processed > 0) {
-          logger.info(`Processed ${result.processed} scheduled messages. Success: ${result.success}, Failed: ${result.failed}`);
-        } else {
-          logger.debug('No scheduled messages to process');
+          logger.info(`Interval processor: ${result.processed} messages processed (${result.success} success, ${result.failed} failed)`);
         }
-        
-        return result;
       } catch (error) {
-        logger.error(`Scheduled message processor error: ${error.message}`);
-        // Don't throw here to prevent constant retries for systemic issues
-        return { processed: 0, success: 0, failed: 0, error: error.message };
+        logger.error(`Scheduled message processor error (interval-based): ${error.message}`);
       }
-    });
+    }, processingInterval);
+    
+    logger.info('Interval-based scheduled message processor initialized');
+    
+    // Initial run after a short delay
+    setTimeout(async () => {
+      try {
+        logger.info('Running initial scheduled message processing');
+        const result = await smsService.processScheduledMessages();
+        logger.info(`Initial processing: ${result.processed} messages processed (${result.success} success, ${result.failed} failed)`);
+      } catch (error) {
+        logger.error(`Error in initial scheduled message processing: ${error.message}`);
+      }
+    }, 10000); // 10 seconds delay
     
     logger.info('Scheduled message processor initialized successfully');
   } catch (error) {
@@ -269,244 +205,64 @@ const setupScheduledMessageProcessor = () => {
 };
 
 /**
- * Set up fallback scheduled message processor using interval
+ * Start the scheduled message processor - ENHANCED
+ * @param {number} interval - Processing interval in milliseconds (default: 30 seconds)
  */
-const setupFallbackScheduledProcessor = () => {
-  logger.info('Setting up fallback scheduled message processor');
-  
-  const processScheduledMessages = async () => {
-    try {
-      if (!smsService || !smsService.processScheduledMessages) {
-        return;
-      }
-      
-      const result = await smsService.processScheduledMessages();
-      
-      if (result.processed > 0) {
-        logger.info(`Processed ${result.processed} scheduled messages. Success: ${result.success}, Failed: ${result.failed}`);
-      }
-    } catch (error) {
-      logger.error(`Fallback scheduled message processor error: ${error.message}`);
-    }
-  };
-  
-  // Initial run after a short delay
-  setTimeout(processScheduledMessages, 5000);
-  
-  // Set up regular interval
-  scheduledMessageInterval = setInterval(processScheduledMessages, 60000); // Every minute
-  
-  logger.info('Fallback scheduled message processor initialized');
-};
-
-/**
- * Start the scheduled message processor
- * @param {number} interval - Processing interval in milliseconds (default: 1 minute)
- */
-const startScheduledMessageProcessor = (interval = 60000) => {
+const startScheduledMessageProcessor = (interval = 30000) => {
   logger.info(`Starting scheduled message processor with ${interval}ms interval`);
   
-  // If queue is available, use it
-  if (scheduledQueue && scheduledQueue.isInitialized) {
-    setupScheduledMessageProcessor();
-    return;
+  // Clear any existing interval
+  if (scheduledProcessorInterval) {
+    clearInterval(scheduledProcessorInterval);
   }
-  
-  // Otherwise use fallback interval-based approach
-  const processScheduledMessages = async () => {
-    try {
-      if (!smsService || !smsService.processScheduledMessages) {
-        logger.debug('SMS service not available for scheduled message processing');
-        return;
-      }
-      
-      const result = await smsService.processScheduledMessages();
-      
-      if (result.processed > 0) {
-        logger.info(`Processed ${result.processed} scheduled messages. Success: ${result.success}, Failed: ${result.failed}`);
-      }
-    } catch (error) {
-      logger.error(`Error processing scheduled messages: ${error.message}`);
-    }
-  };
   
   // Initial run after a short delay
-  setTimeout(processScheduledMessages, 5000);
-  
-  // Set up regular interval
-  if (scheduledMessageInterval) {
-    clearInterval(scheduledMessageInterval);
-  }
-  scheduledMessageInterval = setInterval(processScheduledMessages, interval);
-  
-  logger.info('Scheduled message processor started successfully');
-};
-
-/**
- * Get worker status and metrics
- * @returns {Promise<Object>} Worker status information
- */
-const getWorkerStatus = async () => {
-  const status = {
-    timestamp: new Date().toISOString(),
-    queues: {
-      pushNotifications: null,
-      smsMessages: null,
-      scheduledMessages: null,
-      systemMaintenance: null
-    },
-    workers: {
-      monitoring: monitoringWorker ? 'running' : 'stopped',
-      backup: backupScheduler ? 'scheduled' : 'not_scheduled',
-      scheduledProcessor: scheduledMessageInterval ? 'running' : 'stopped'
-    },
-    services: {
-      firebase: firebase.isInitialized ? firebase.isInitialized() : false,
-      smsService: !!(smsService && smsService.processScheduledMessages),
-      notificationService: !!(notificationService && notificationService.cleanupOldNotifications)
-    }
-  };
-  
-  // Get queue metrics
-  const queues = [
-    { name: 'pushNotifications', instance: pushQueue },
-    { name: 'smsMessages', instance: smsQueue },
-    { name: 'scheduledMessages', instance: scheduledQueue },
-    { name: 'systemMaintenance', instance: maintenanceQueue }
-  ];
-  
-  for (const { name, instance } of queues) {
+  setTimeout(async () => {
     try {
-      if (instance && instance.isInitialized) {
-        status.queues[name] = await instance.getMetrics();
-      } else {
-        status.queues[name] = {
-          initialized: false,
-          error: 'Queue not initialized'
-        };
+      logger.info('Running startup scheduled message processing');
+      const result = await smsService.processScheduledMessages();
+      if (result.processed > 0) {
+        logger.info(`Startup processing: ${result.processed} messages processed (${result.success} success, ${result.failed} failed)`);
       }
     } catch (error) {
-      status.queues[name] = {
-        initialized: false,
-        error: error.message
-      };
+      logger.error(`Error in startup scheduled message processing: ${error.message}`);
     }
-  }
+  }, 5000);
   
-  return status;
-};
-
-/**
- * Health check for all workers
- * @returns {Promise<Object>} Health check results
- */
-const healthCheck = async () => {
-  try {
-    const status = await getWorkerStatus();
-    const issues = [];
-    
-    // Check queue health
-    for (const [queueName, queueStatus] of Object.entries(status.queues)) {
-      if (!queueStatus || !queueStatus.initialized) {
-        issues.push(`Queue ${queueName} is not initialized`);
+  // Set up regular processing
+  if (scheduledQueue) {
+    // Use queue-based processing
+    setupScheduledMessageProcessor();
+  } else {
+    // Fallback to traditional interval if queue failed
+    logger.warn('Queue system unavailable, using fallback interval for scheduled messages');
+    scheduledProcessorInterval = setInterval(async () => {
+      try {
+        const result = await smsService.processScheduledMessages();
+        if (result.processed > 0) {
+          logger.info(`Fallback processor: ${result.processed} messages processed`);
+        }
+      } catch (error) {
+        logger.error(`Error processing scheduled messages: ${error.message}`);
       }
-    }
-    
-    // Check critical services
-    if (!status.services.smsService) {
-      issues.push('SMS service is not available');
-    }
-    
-    if (config.notifications?.pushEnabled && !status.services.firebase) {
-      issues.push('Firebase service is not available (push notifications disabled)');
-    }
-    
-    return {
-      status: issues.length === 0 ? 'healthy' : 'degraded',
-      issues,
-      timestamp: new Date().toISOString(),
-      details: status
-    };
-  } catch (error) {
-    return {
-      status: 'unhealthy',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    };
+    }, interval);
   }
 };
 
 /**
- * Restart a specific worker or queue
- * @param {string} workerName - Name of the worker to restart
- * @returns {Promise<boolean>} Success status
- */
-const restartWorker = async (workerName) => {
-  try {
-    logger.info(`Restarting worker: ${workerName}`);
-    
-    switch (workerName) {
-      case 'scheduledProcessor':
-        if (scheduledMessageInterval) {
-          clearInterval(scheduledMessageInterval);
-          scheduledMessageInterval = null;
-        }
-        startScheduledMessageProcessor();
-        break;
-        
-      case 'pushQueue':
-        if (pushQueue) {
-          await pushQueue.queue.close();
-        }
-        pushQueue = new Queue('pushNotifications');
-        logger.info('Push notifications queue restarted');
-        break;
-        
-      case 'smsQueue':
-        if (smsQueue) {
-          await smsQueue.queue.close();
-        }
-        smsQueue = new Queue('smsMessages');
-        logger.info('SMS messages queue restarted');
-        break;
-        
-      case 'scheduledQueue':
-        if (scheduledQueue) {
-          await scheduledQueue.queue.close();
-        }
-        scheduledQueue = new Queue('scheduledMessages');
-        setupScheduledMessageProcessor();
-        logger.info('Scheduled messages queue restarted');
-        break;
-        
-      case 'maintenanceQueue':
-        if (maintenanceQueue) {
-          await maintenanceQueue.queue.close();
-        }
-        maintenanceQueue = new Queue('systemMaintenance');
-        setupMaintenanceTasks();
-        logger.info('System maintenance queue restarted');
-        break;
-        
-      default:
-        logger.warn(`Unknown worker name: ${workerName}`);
-        return false;
-    }
-    
-    logger.info(`Worker ${workerName} restarted successfully`);
-    return true;
-  } catch (error) {
-    logger.error(`Failed to restart worker ${workerName}: ${error.message}`);
-    return false;
-  }
-};
-
-/**
- * Shutdown all workers gracefully
- * @returns {Promise<void>}
+ * Enhanced shutdown function
  */
 const shutdown = async () => {
   logger.info('Shutting down workers gracefully');
+  
+  const shutdownPromises = [];
+  
+  // Stop scheduled message processor interval
+  if (scheduledProcessorInterval) {
+    clearInterval(scheduledProcessorInterval);
+    scheduledProcessorInterval = null;
+    logger.info('Scheduled message processor interval stopped');
+  }
   
   // Stop monitoring worker
   if (monitoringWorker && monitoringWorker.stop) {
@@ -528,107 +284,242 @@ const shutdown = async () => {
     }
   }
   
-  // Stop scheduled message processor interval
-  if (scheduledMessageInterval) {
-    try {
-      clearInterval(scheduledMessageInterval);
-      scheduledMessageInterval = null;
-      logger.info('Scheduled message processor interval stopped');
-    } catch (error) {
-      logger.error('Error stopping scheduled message processor:', error);
-    }
-  }
-  
-  // Close queues
+  // Close queues gracefully
   const queuesToClose = [
-    { name: 'pushNotifications', instance: pushQueue },
-    { name: 'smsMessages', instance: smsQueue },
-    { name: 'scheduledMessages', instance: scheduledQueue },
-    { name: 'systemMaintenance', instance: maintenanceQueue }
-  ];
+    { queue: pushQueue, name: 'pushNotifications' },
+    { queue: smsQueue, name: 'smsMessages' },
+    { queue: scheduledQueue, name: 'scheduledMessages' },
+    { queue: maintenanceQueue, name: 'systemMaintenance' }
+  ].filter(item => item.queue);
   
-  for (const { name, instance } of queuesToClose) {
+  for (const { queue, name } of queuesToClose) {
     try {
-      if (instance && instance.queue && instance.queue.close) {
-        await instance.queue.close();
-        logger.info(`Closed ${name} queue`);
+      if (queue.queue && queue.queue.close) {
+        shutdownPromises.push(
+          queue.queue.close().then(() => {
+            logger.info(`Closed ${name} queue`);
+          }).catch(error => {
+            logger.error(`Error closing ${name} queue:`, error);
+          })
+        );
       }
     } catch (error) {
-      logger.error(`Error closing queue ${name}:`, error);
+      logger.error(`Error preparing to close ${name} queue:`, error);
     }
   }
   
-  // Reset queue references
-  pushQueue = null;
-  smsQueue = null;
-  scheduledQueue = null;
-  maintenanceQueue = null;
-  
-  logger.info('All workers shut down successfully');
+  // Wait for all shutdown operations to complete (with timeout)
+  try {
+    await Promise.race([
+      Promise.all(shutdownPromises),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Shutdown timeout')), 15000)
+      )
+    ]);
+    logger.info('All workers shut down successfully');
+  } catch (error) {
+    logger.error('Error during worker shutdown:', error);
+    logger.info('Forcing worker shutdown due to timeout or error');
+  }
 };
 
 /**
- * Emergency shutdown for critical errors
- * @returns {Promise<void>}
+ * Health check for workers
  */
-const emergencyShutdown = async () => {
-  logger.warn('Emergency shutdown initiated');
+const getWorkerHealth = () => {
+  const health = {
+    scheduledProcessor: {
+      queueBased: scheduledQueue && scheduledQueue.queue ? 'active' : 'inactive',
+      intervalBased: scheduledProcessorInterval ? 'active' : 'inactive',
+    },
+    queues: {
+      pushNotifications: pushQueue && pushQueue.queue ? 'active' : 'inactive',
+      smsMessages: smsQueue && smsQueue.queue ? 'active' : 'inactive',
+      scheduledMessages: scheduledQueue && scheduledQueue.queue ? 'active' : 'inactive',
+      systemMaintenance: maintenanceQueue && maintenanceQueue.queue ? 'active' : 'inactive',
+    },
+    monitoring: monitoringWorker ? 'active' : 'inactive',
+    backup: backupScheduler ? 'active' : 'inactive',
+  };
   
+  return health;
+};
+
+/**
+ * Force process scheduled messages (for manual triggers)
+ */
+const forceProcessScheduledMessages = async () => {
   try {
-    // Force close all queues without waiting
-    const forceClosePromises = [];
-    
-    if (pushQueue && pushQueue.queue) {
-      forceClosePromises.push(pushQueue.queue.close());
-    }
-    if (smsQueue && smsQueue.queue) {
-      forceClosePromises.push(smsQueue.queue.close());
-    }
-    if (scheduledQueue && scheduledQueue.queue) {
-      forceClosePromises.push(scheduledQueue.queue.close());
-    }
-    if (maintenanceQueue && maintenanceQueue.queue) {
-      forceClosePromises.push(maintenanceQueue.queue.close());
-    }
-    
-    // Wait for all queues to close with timeout
-    await Promise.race([
-      Promise.all(forceClosePromises),
-      new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
-    ]);
-    
-    // Clear intervals
-    if (scheduledMessageInterval) {
-      clearInterval(scheduledMessageInterval);
-    }
-    
-    // Stop monitoring worker
-    if (monitoringWorker && monitoringWorker.stop) {
-      monitoringWorker.stop();
-    }
-    
-    // Cancel backup scheduler
-    if (backupScheduler) {
-      backupScheduler();
-    }
-    
-    logger.info('Emergency shutdown completed');
+    logger.info('Manually triggering scheduled message processing');
+    const result = await smsService.processScheduledMessages();
+    logger.info(`Manual processing completed: ${result.processed} messages processed (${result.success} success, ${result.failed} failed)`);
+    return result;
   } catch (error) {
-    logger.error('Error during emergency shutdown:', error);
+    logger.error(`Manual scheduled message processing error: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
+ * Get queue statistics
+ */
+const getQueueStats = async () => {
+  const stats = {};
+  
+  const queues = [
+    { queue: pushQueue, name: 'pushNotifications' },
+    { queue: smsQueue, name: 'smsMessages' },
+    { queue: scheduledQueue, name: 'scheduledMessages' },
+    { queue: maintenanceQueue, name: 'systemMaintenance' }
+  ];
+  
+  for (const { queue, name } of queues) {
+    try {
+      if (queue && queue.queue) {
+        const [waiting, active, completed, failed] = await Promise.all([
+          queue.queue.getWaiting(),
+          queue.queue.getActive(),
+          queue.queue.getCompleted(),
+          queue.queue.getFailed()
+        ]);
+        
+        stats[name] = {
+          waiting: waiting.length,
+          active: active.length,
+          completed: completed.length,
+          failed: failed.length,
+          status: 'healthy'
+        };
+      } else {
+        stats[name] = {
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          status: 'inactive'
+        };
+      }
+    } catch (error) {
+      logger.error(`Error getting stats for ${name} queue:`, error);
+      stats[name] = {
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        status: 'error',
+        error: error.message
+      };
+    }
+  }
+  
+  return stats;
+};
+
+/**
+ * Clean up failed jobs in queues
+ */
+const cleanupFailedJobs = async () => {
+  const results = {};
+  
+  const queues = [
+    { queue: pushQueue, name: 'pushNotifications' },
+    { queue: smsQueue, name: 'smsMessages' },
+    { queue: scheduledQueue, name: 'scheduledMessages' },
+    { queue: maintenanceQueue, name: 'systemMaintenance' }
+  ];
+  
+  for (const { queue, name } of queues) {
+    try {
+      if (queue && queue.queue) {
+        const failedJobs = await queue.queue.getFailed();
+        
+        // Clean up jobs older than 24 hours
+        const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+        let cleanedCount = 0;
+        
+        for (const job of failedJobs) {
+          if (job.timestamp < twentyFourHoursAgo) {
+            await job.remove();
+            cleanedCount++;
+          }
+        }
+        
+        results[name] = {
+          totalFailed: failedJobs.length,
+          cleaned: cleanedCount,
+          remaining: failedJobs.length - cleanedCount
+        };
+        
+        if (cleanedCount > 0) {
+          logger.info(`Cleaned ${cleanedCount} old failed jobs from ${name} queue`);
+        }
+      }
+    } catch (error) {
+      logger.error(`Error cleaning failed jobs from ${name} queue:`, error);
+      results[name] = {
+        error: error.message
+      };
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Pause/Resume queue processing
+ */
+const pauseQueue = async (queueName) => {
+  const queueMap = {
+    pushNotifications: pushQueue,
+    smsMessages: smsQueue,
+    scheduledMessages: scheduledQueue,
+    systemMaintenance: maintenanceQueue
+  };
+  
+  const queue = queueMap[queueName];
+  if (queue && queue.queue) {
+    await queue.queue.pause();
+    logger.info(`Paused ${queueName} queue`);
+    return { success: true, message: `${queueName} queue paused` };
+  } else {
+    throw new Error(`Queue ${queueName} not found or inactive`);
+  }
+};
+
+const resumeQueue = async (queueName) => {
+  const queueMap = {
+    pushNotifications: pushQueue,
+    smsMessages: smsQueue,
+    scheduledMessages: scheduledQueue,
+    systemMaintenance: maintenanceQueue
+  };
+  
+  const queue = queueMap[queueName];
+  if (queue && queue.queue) {
+    await queue.queue.resume();
+    logger.info(`Resumed ${queueName} queue`);
+    return { success: true, message: `${queueName} queue resumed` };
+  } else {
+    throw new Error(`Queue ${queueName} not found or inactive`);
   }
 };
 
 module.exports = {
   initializeWorkers,
   startScheduledMessageProcessor,
-  getWorkerStatus,
-  healthCheck,
-  restartWorker,
   shutdown,
-  emergencyShutdown,
-  // Export queue instances for direct access if needed
-  get pushQueue() { return pushQueue; },
-  get smsQueue() { return smsQueue; },
-  get scheduledQueue() { return scheduledQueue; },
-  get maintenanceQueue() { return maintenanceQueue; }
+  
+  // Queue references
+  pushQueue,
+  smsQueue,
+  scheduledQueue,
+  maintenanceQueue,
+  
+  // Enhanced functionality
+  getWorkerHealth,
+  forceProcessScheduledMessages,
+  getQueueStats,
+  cleanupFailedJobs,
+  pauseQueue,
+  resumeQueue,
 };

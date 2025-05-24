@@ -190,7 +190,7 @@ const cleanupExcessiveIndexes = async () => {
     }
     
     // Check other critical tables
-    const criticalTables = ['messages', 'transactions', 'contacts'];
+    const criticalTables = ['messages', 'transactions', 'contacts', 'settings', 'groups', 'notifications'];
     for (const tableName of criticalTables) {
       if (existingTables.includes(tableName)) {
         const tableIndexes = await queryInterface.showIndex(tableName);

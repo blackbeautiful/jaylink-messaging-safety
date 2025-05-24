@@ -65,13 +65,25 @@ const sendSMS = async (userId, messageData) => {
       throw new ApiError('Insufficient balance to send message', 400);
     }
 
-    // If scheduled for later, create scheduled message
+    // If scheduled for later, create scheduled message - FIXED
     if (scheduled) {
-      const scheduledAt = new Date(scheduled);
+      let scheduledAt;
       
-      // Validate scheduled date (must be in the future)
-      if (scheduledAt <= new Date()) {
-        throw new ApiError('Scheduled time must be in the future', 400);
+      // Handle different scheduled input formats
+      if (typeof scheduled === 'string') {
+        scheduledAt = new Date(scheduled);
+      } else if (scheduled instanceof Date) {
+        scheduledAt = scheduled;
+      } else {
+        throw new ApiError('Invalid scheduled date format', 400);
+      }
+      
+      // Validate scheduled date (must be in the future) - with buffer
+      const now = new Date();
+      const minScheduleTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
+      
+      if (scheduledAt <= minScheduleTime) {
+        throw new ApiError('Scheduled time must be at least 1 minute in the future', 400);
       }
       
       // Create scheduled message
@@ -79,11 +91,12 @@ const sendSMS = async (userId, messageData) => {
         userId,
         type: 'sms',
         message,
-        senderId,
+        senderId: senderId || null,
         recipients: JSON.stringify(phoneNumbers),
         recipientCount: phoneNumbers.length,
         scheduledAt,
         status: 'pending',
+        cost, // Store expected cost
       });
       
       // Create notification for scheduled message
@@ -97,7 +110,8 @@ const sendSMS = async (userId, messageData) => {
           messageId: `scheduled_${scheduledMessage.id}`,
           recipientCount: phoneNumbers.length,
           scheduledAt: scheduledAt.toISOString(),
-          recipientType
+          recipientType,
+          cost
         },
         false // Don't send email for routine operations
       ).catch(err => logger.error(`Failed to create scheduled message notification: ${err.message}`));
@@ -108,7 +122,8 @@ const sendSMS = async (userId, messageData) => {
         recipients: phoneNumbers.length,
         cost,
         scheduledAt,
-        recipientType
+        recipientType,
+        scheduledMessageId: scheduledMessage.id
       };
     }
     
@@ -205,13 +220,25 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
       throw new ApiError('Insufficient balance to send bulk message', 400);
     }
     
-    // If scheduled for later, create scheduled message
+    // If scheduled for later, create scheduled message - FIXED
     if (scheduled) {
-      const scheduledAt = new Date(scheduled);
+      let scheduledAt;
       
-      // Validate scheduled date (must be in the future)
-      if (scheduledAt <= new Date()) {
-        throw new ApiError('Scheduled time must be in the future', 400);
+      // Handle different scheduled input formats
+      if (typeof scheduled === 'string') {
+        scheduledAt = new Date(scheduled);
+      } else if (scheduled instanceof Date) {
+        scheduledAt = scheduled;
+      } else {
+        throw new ApiError('Invalid scheduled date format', 400);
+      }
+      
+      // Validate scheduled date (must be in the future) - with buffer
+      const now = new Date();
+      const minScheduleTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
+      
+      if (scheduledAt <= minScheduleTime) {
+        throw new ApiError('Scheduled time must be at least 1 minute in the future', 400);
       }
       
       // Create scheduled message
@@ -219,12 +246,20 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
         userId,
         type: 'sms',
         message,
-        senderId,
+        senderId: senderId || null,
         recipients: JSON.stringify(phoneNumbers),
         recipientCount: phoneNumbers.length,
         scheduledAt,
         status: 'pending',
+        cost, // Store expected cost
       });
+      
+      // Clean up the CSV file
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        logger.warn(`Failed to delete CSV file: ${error.message}`);
+      }
       
       // Create notification for scheduled bulk message
       notificationService.createNotification(
@@ -236,7 +271,8 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
           action: 'bulk-message-scheduled',
           messageId: `scheduled_${scheduledMessage.id}`,
           recipientCount: phoneNumbers.length,
-          scheduledAt: scheduledAt.toISOString()
+          scheduledAt: scheduledAt.toISOString(),
+          cost
         },
         false // Don't send email for routine operations
       ).catch(err => logger.error(`Failed to create scheduled bulk message notification: ${err.message}`));
@@ -246,7 +282,8 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
         status: 'scheduled',
         recipients: phoneNumbers.length,
         cost,
-        scheduledAt
+        scheduledAt,
+        scheduledMessageId: scheduledMessage.id
       };
     }
     
@@ -263,8 +300,8 @@ const sendBulkSMS = async (userId, filePath, messageData) => {
       try {
         // Send batch using the SMS provider
         const batchResult = await smsProviderService.sendSms(batch, message, senderId);
-        sentCount += batchResult.accepted;
-        failedCount += batchResult.rejected;
+        sentCount += batchResult.accepted || batch.length;
+        failedCount += batchResult.rejected || 0;
       } catch (error) {
         logger.error(`Batch sending error (batch ${i / batchSize + 1}): ${error.message}`);
         failedCount += batch.length;
@@ -587,7 +624,7 @@ const getMessageHistory = async (userId, options = {}) => {
  * @returns {Object} Scheduled messages with pagination
  */
 const getScheduledMessages = async (userId, options = {}) => {
-  const { page = 1, limit = 20, type = null } = options;
+  const { page = 1, limit = 20, type = null, search = null } = options;
   const offset = (page - 1) * limit;
   
   try {
@@ -601,6 +638,27 @@ const getScheduledMessages = async (userId, options = {}) => {
     // Add message type filter if provided
     if (type) {
       whereConditions.type = type;
+    }
+    
+    // Add search functionality
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+      whereConditions[Op.or] = [
+        // Search in message content
+        db.sequelize.where(
+          db.sequelize.fn('LOWER', db.sequelize.col('message')),
+          'LIKE',
+          `%${searchTerm.toLowerCase()}%`
+        ),
+        // Search in sender ID
+        db.sequelize.where(
+          db.sequelize.fn('LOWER', db.sequelize.col('senderId')),
+          'LIKE',
+          `%${searchTerm.toLowerCase()}%`
+        ),
+        // Search in recipients
+        { recipients: { [Op.like]: `%${searchTerm}%` } },
+      ];
     }
     
     // Query database with pagination
@@ -620,6 +678,10 @@ const getScheduledMessages = async (userId, options = {}) => {
         msg.recipients = [];
         logger.warn(`Failed to parse recipients for scheduled message ${msg.id}: ${error.message}`);
       }
+      
+      // Ensure cost is a number
+      msg.cost = typeof msg.cost === 'number' ? msg.cost : parseFloat(msg.cost) || 0;
+      
       return msg;
     });
     
@@ -659,20 +721,41 @@ const cancelScheduledMessage = async (userId, scheduledId) => {
       where: {
         id: scheduledId,
         userId,
-        status: { [Op.notIn]: ['sent', 'cancelled'] },
+        status: { [Op.notIn]: ['sent', 'cancelled', 'processing'] },
       },
     });
     
     if (!scheduledMessage) {
-      throw new ApiError('Scheduled message not found or already processed', 404);
+      throw new ApiError('Scheduled message not found or cannot be cancelled', 404);
     }
     
-    // Convert scheduledAt to Date object if it's a string
-    const scheduledAt = scheduledMessage.scheduledAt instanceof Date 
-      ? scheduledMessage.scheduledAt 
-      : new Date(scheduledMessage.scheduledAt);
+    // Check if the message is not too close to execution time
+    const now = new Date();
+    const scheduledAt = new Date(scheduledMessage.scheduledAt);
+    const timeDiff = scheduledAt.getTime() - now.getTime();
     
-    await scheduledMessage.update({ status: 'cancelled' });
+    if (timeDiff < 60 * 1000) { // Less than 1 minute
+      throw new ApiError('Cannot cancel message scheduled to send within 1 minute', 400);
+    }
+    
+    await scheduledMessage.update({ 
+      status: 'cancelled',
+      cancelledAt: new Date()
+    });
+    
+    // Send WebSocket notification
+    try {
+      const websocket = require('../utils/websocket.util');
+      if (websocket.isInitialized()) {
+        websocket.emit(`user:${userId}`, 'scheduled_update', {
+          id: scheduledId,
+          status: 'cancelled',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsError) {
+      logger.error(`WebSocket notification error: ${wsError.message}`);
+    }
     
     notificationService.createNotification(
       userId,
@@ -683,13 +766,22 @@ const cancelScheduledMessage = async (userId, scheduledId) => {
         action: 'scheduled-message-cancelled',
         scheduleId: scheduledId,
         recipientCount: scheduledMessage.recipientCount,
-        scheduledAt: scheduledAt.toISOString(), // Use converted date
+        scheduledAt: scheduledAt.toISOString(),
         timestamp: new Date().toISOString()
       },
       false
     ).catch(err => logger.error(`Failed to create cancelled message notification: ${err.message}`));
     
-    return true;
+    return {
+      success: true,
+      message: 'Scheduled message cancelled successfully',
+      scheduledMessage: {
+        id: scheduledMessage.id,
+        status: 'cancelled',
+        scheduledAt: scheduledMessage.scheduledAt,
+        recipientCount: scheduledMessage.recipientCount
+      }
+    };
   } catch (error) {
     logger.error(`Cancel scheduled message error: ${error.message}`, { 
       stack: error.stack, 
@@ -933,18 +1025,28 @@ const processCsvPhoneNumbers = async (filePath) => {
  */
 const processScheduledMessages = async () => {
   const t = await db.sequelize.transaction();
+  
   try {
+    // Find due messages with a small buffer to avoid race conditions
+    const now = new Date();
+    const bufferTime = new Date(now.getTime() + 30 * 1000); // 30 seconds buffer
+    
     const dueMessages = await ScheduledMessage.findAll({
       where: {
         status: 'pending',
-        scheduledAt: { [Op.lte]: new Date() },
+        scheduledAt: { 
+          [Op.lte]: bufferTime,
+          [Op.gte]: new Date(now.getTime() - 5 * 60 * 1000) // Not older than 5 minutes
+        },
       },
-      limit: 100,
-      transaction: t
+      limit: 50, // Process in smaller batches
+      transaction: t,
+      order: [['scheduledAt', 'ASC']]
     });
     
     if (dueMessages.length === 0) {
       await t.commit();
+      logger.debug('No scheduled messages due for processing');
       return { processed: 0, success: 0, failed: 0 };
     }
     
@@ -955,11 +1057,7 @@ const processScheduledMessages = async () => {
     
     for (const scheduledMessage of dueMessages) {
       try {
-        // Ensure scheduledAt is a Date object
-        const scheduledAt = scheduledMessage.scheduledAt instanceof Date 
-          ? scheduledMessage.scheduledAt 
-          : new Date(scheduledMessage.scheduledAt);
-        
+        // Mark as processing first to prevent duplicate processing
         await scheduledMessage.update({ status: 'processing' }, { transaction: t });
         
         const user = await User.findByPk(scheduledMessage.userId, { transaction: t });
@@ -970,16 +1068,22 @@ const processScheduledMessages = async () => {
         let phoneNumbers = [];
         try {
           phoneNumbers = JSON.parse(scheduledMessage.recipients);
+          if (!Array.isArray(phoneNumbers)) {
+            throw new Error('Recipients is not an array');
+          }
         } catch (error) {
           throw new Error(`Failed to parse recipients: ${error.message}`);
         }
         
+        // Recalculate cost to ensure accuracy
         const cost = smsProviderService.calculateMessageCost(
-          scheduledMessage.recipientCount,
+          scheduledMessage.recipientCount || phoneNumbers.length,
           scheduledMessage.message
         );
         
-        if (user.balance < cost) {
+        // Check user balance
+        const currentBalance = await balanceService.getUserBalance(user.id);
+        if (currentBalance < cost) {
           throw new Error('Insufficient balance');
         }
         
@@ -993,11 +1097,14 @@ const processScheduledMessages = async () => {
             scheduledMessage.senderId
           );
         } else if (scheduledMessage.type === 'voice') {
-          // Implement voice call logic
+          // Implement voice call logic when available
+          throw new Error('Voice messages not yet implemented');
         } else if (scheduledMessage.type === 'audio') {
-          // Implement audio message logic
+          // Implement audio message logic when available
+          throw new Error('Audio messages not yet implemented');
         }
         
+        // Deduct balance
         await balanceService.deductBalance(
           user.id,
           cost,
@@ -1006,6 +1113,7 @@ const processScheduledMessages = async () => {
           { transaction: t }
         );
         
+        // Create message record
         await Message.create({
           userId: user.id,
           messageId,
@@ -1013,43 +1121,44 @@ const processScheduledMessages = async () => {
           content: scheduledMessage.message,
           audioUrl: scheduledMessage.audioUrl,
           senderId: scheduledMessage.senderId,
-          recipients: scheduledMessage.recipients,
-          recipientCount: scheduledMessage.recipientCount,
+          recipients: JSON.stringify(phoneNumbers),
+          recipientCount: phoneNumbers.length,
           cost,
           status: 'sent',
           scheduled: true,
-          scheduledAt,
+          scheduledAt: scheduledMessage.scheduledAt,
         }, { transaction: t });
         
-        await scheduledMessage.update({ status: 'sent' }, { transaction: t });
+        // Mark scheduled message as sent
+        await scheduledMessage.update({ 
+          status: 'sent',
+          processedAt: new Date()
+        }, { transaction: t });
         
-        // Send WebSocket notification (import this function from websocket.util.js)
-        try {
-          // Create WebSocket update payload
-          const wsPayload = {
-            id: scheduledMessage.id,
-            status: 'sent',
-            recipientCount: scheduledMessage.recipientCount,
-            messageId: messageId,
-            timestamp: new Date().toISOString()
-          };
-
-          // Import websocket utility if it exists
-          if (typeof emit === 'function') {
-            // Emit to user's channel
-            emit(`user:${user.id}`, 'scheduled_update', wsPayload);
+        // Send WebSocket notification (outside transaction)
+        process.nextTick(() => {
+          try {
+            const websocket = require('../utils/websocket.util');
+            if (websocket.isInitialized()) {
+              websocket.emit(`user:${user.id}`, 'scheduled_update', {
+                id: scheduledMessage.id,
+                status: 'sent',
+                recipientCount: phoneNumbers.length,
+                messageId: messageId,
+                timestamp: new Date().toISOString()
+              });
+            }
+          } catch (wsError) {
+            logger.error(`WebSocket notification error: ${wsError.message}`);
           }
-        } catch (wsError) {
-          logger.error(`WebSocket notification error: ${wsError.message}`);
-          // Don't fail the transaction if WebSocket notification fails
-        }
+        });
         
-        // Notification outside transaction
+        // Create success notification (outside transaction)
         process.nextTick(() => {
           notificationService.createNotification(
             user.id,
             'Scheduled Message Sent',
-            `Your scheduled message to ${phoneNumbers.length} recipient(s) has been sent.`,
+            `Your scheduled message to ${phoneNumbers.length} recipient(s) has been sent successfully.`,
             'success',
             {
               action: 'scheduled-message-sent',
@@ -1064,35 +1173,40 @@ const processScheduledMessages = async () => {
         });
         
         successCount++;
-      } catch (error) {
-        logger.error(`Failed to process scheduled message ${scheduledMessage.id}: ${error.message}`);
+        logger.info(`Successfully processed scheduled message ${scheduledMessage.id}`);
         
+      } catch (error) {
+        logger.error(`Failed to process scheduled message ${scheduledMessage.id}: ${error.message}`, {
+          stack: error.stack,
+          messageId: scheduledMessage.id
+        });
+        
+        // Mark as failed
         await scheduledMessage.update({ 
           status: 'failed',
-          errorMessage: error.message
+          errorMessage: error.message,
+          processedAt: new Date()
         }, { transaction: t });
         
-        // Send WebSocket notification for failure
-        try {
-          // Create WebSocket update payload for failure
-          const wsPayload = {
-            id: scheduledMessage.id,
-            status: 'failed',
-            recipientCount: scheduledMessage.recipientCount,
-            errorMessage: error.message,
-            timestamp: new Date().toISOString()
-          };
-
-          // Import websocket utility if it exists
-          if (typeof emit === 'function') {
-            // Emit to user's channel
-            emit(`user:${scheduledMessage.userId}`, 'scheduled_update', wsPayload);
+        // Send WebSocket notification for failure (outside transaction)
+        process.nextTick(() => {
+          try {
+            const websocket = require('../utils/websocket.util');
+            if (websocket.isInitialized()) {
+              websocket.emit(`user:${scheduledMessage.userId}`, 'scheduled_update', {
+                id: scheduledMessage.id,
+                status: 'failed',
+                recipientCount: scheduledMessage.recipientCount,
+                errorMessage: error.message,
+                timestamp: new Date().toISOString()
+              });
+            }
+          } catch (wsError) {
+            logger.error(`WebSocket failure notification error: ${wsError.message}`);
           }
-        } catch (wsError) {
-          logger.error(`WebSocket failure notification error: ${wsError.message}`);
-          // Don't fail the transaction if WebSocket notification fails
-        }
+        });
         
+        // Create failure notification (outside transaction)
         process.nextTick(() => {
           notificationService.createNotification(
             scheduledMessage.userId,
@@ -1106,7 +1220,7 @@ const processScheduledMessages = async () => {
               error: error.message,
               timestamp: new Date().toISOString()
             },
-            true
+            true // Send email for failures
           ).catch(err => logger.error(`Notification error: ${err.message}`));
         });
         
@@ -1115,11 +1229,19 @@ const processScheduledMessages = async () => {
     }
     
     await t.commit();
-    return {
+    
+    const result = {
       processed: dueMessages.length,
       success: successCount,
       failed: failedCount
     };
+    
+    if (result.processed > 0) {
+      logger.info(`Scheduled message processing completed: ${successCount} success, ${failedCount} failed`);
+    }
+    
+    return result;
+    
   } catch (error) {
     await t.rollback();
     logger.error(`Process scheduled messages error: ${error.message}`, { 
@@ -1591,13 +1713,14 @@ const healthCheck = async () => {
 const getScheduledMessageUpdates = async (userId, messageIds) => {
   try {
     // Find all provided scheduled messages that belong to this user
-    // and have been updated (sent or failed)
+    // and have been updated (sent, failed, or cancelled)
     const updatedMessages = await ScheduledMessage.findAll({
       where: {
         userId,
         id: { [Op.in]: messageIds },
-        status: { [Op.in]: ['sent', 'failed'] }
-      }
+        status: { [Op.in]: ['sent', 'failed', 'cancelled'] }
+      },
+      attributes: ['id', 'status', 'recipientCount', 'errorMessage', 'processedAt', 'cancelledAt']
     });
     
     if (!updatedMessages || updatedMessages.length === 0) {
@@ -1606,16 +1729,24 @@ const getScheduledMessageUpdates = async (userId, messageIds) => {
     
     // Format the updates
     const updates = updatedMessages.map(message => {
-      // Basic update information
       const update = {
         id: message.id,
         status: message.status,
-        recipientCount: message.recipientCount
+        recipientCount: message.recipientCount,
+        timestamp: new Date().toISOString()
       };
       
       // Add error message if failed
       if (message.status === 'failed' && message.errorMessage) {
         update.errorMessage = message.errorMessage;
+      }
+      
+      // Add processed/cancelled timestamp
+      if (message.processedAt) {
+        update.processedAt = message.processedAt.toISOString();
+      }
+      if (message.cancelledAt) {
+        update.cancelledAt = message.cancelledAt.toISOString();
       }
       
       return update;
@@ -1644,6 +1775,8 @@ module.exports = {
   processScheduledMessages,
   getGroupPhoneNumbers,
   processRecipients,
+  
+  // New exports
   deleteMessage,
   batchDeleteMessages,
   exportMessageHistory,

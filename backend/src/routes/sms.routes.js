@@ -1,4 +1,4 @@
-// backend/src/routes/sms.routes.js - Complete SMS routes with all operations
+// backend/src/routes/sms.routes.js - Complete SMS routes with all operations and fixes
 const express = require('express');
 const smsController = require('../controllers/sms.controller');
 const { authenticate } = require('../middleware/auth.middleware');
@@ -92,6 +92,43 @@ const generalLimiter = rateLimit({
 // MIDDLEWARE HELPERS
 // =====================================
 
+// Enhanced middleware for scheduled message validation
+const validateScheduledTime = (req, res, next) => {
+  if (req.body.scheduled) {
+    try {
+      const scheduledDate = new Date(req.body.scheduled);
+      const now = new Date();
+      const minScheduleTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
+      
+      if (isNaN(scheduledDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid scheduled date format. Please use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)',
+          error: { code: 'INVALID_DATE_FORMAT' }
+        });
+      }
+      
+      if (scheduledDate <= minScheduleTime) {
+        return res.status(400).json({
+          success: false,
+          message: 'Scheduled time must be at least 1 minute in the future',
+          error: { code: 'INVALID_SCHEDULE_TIME' }
+        });
+      }
+      
+      // Normalize the scheduled time to ISO string
+      req.body.scheduled = scheduledDate.toISOString();
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid scheduled date format',
+        error: { code: 'DATE_PARSE_ERROR', details: error.message }
+      });
+    }
+  }
+  next();
+};
+
 // Middleware to handle "all" filter values for export and history
 const handleFilterAllValues = (req, res, next) => {
   if (req.query.type === 'all') req.query.type = '';
@@ -105,26 +142,42 @@ const addMessageIdToBody = (req, res, next) => {
   next();
 };
 
+// Middleware to validate scheduled message ID
+const validateScheduledId = (req, res, next) => {
+  const { scheduledId } = req.params;
+  
+  if (!scheduledId || isNaN(parseInt(scheduledId))) {
+    return res.status(400).json({
+      success: false,
+      message: 'Valid scheduled message ID is required',
+      error: { code: 'INVALID_SCHEDULE_ID' }
+    });
+  }
+  
+  next();
+};
+
 // =====================================
 // CORE SMS OPERATIONS
 // =====================================
 
 /**
  * @route POST /api/sms/send
- * @desc Send single SMS message
+ * @desc Send single SMS message (with enhanced scheduling support)
  * @access Private
  */
 router.post(
   '/send',
   authenticate,
   sendMessageLimiter,
+  validateScheduledTime,
   validate(smsValidator.sendSmsSchema),
   smsController.sendSMS
 );
 
 /**
  * @route POST /api/sms/bulk-send
- * @desc Send bulk SMS using CSV file
+ * @desc Send bulk SMS using CSV file (with enhanced scheduling support)
  * @access Private
  */
 router.post(
@@ -132,6 +185,7 @@ router.post(
   authenticate,
   bulkMessageLimiter,
   csvUploadMiddleware,
+  validateScheduledTime,
   validate(smsValidator.bulkSendSmsSchema),
   smsController.sendBulkSMS
 );
@@ -242,11 +296,12 @@ router.post(
 
 /**
  * @route GET /api/sms/scheduled
- * @desc Get all scheduled messages
+ * @desc Get all scheduled messages (enhanced with search)
  * @access Private
  * @query {number} page - Page number (default: 1)
  * @query {number} limit - Items per page (default: 20, max: 100)
  * @query {string} type - Message type filter (sms, voice, audio)
+ * @query {string} search - Search term for message content or recipients
  */
 router.get(
   '/scheduled',
@@ -265,6 +320,7 @@ router.delete(
   '/scheduled/:scheduledId',
   authenticate,
   generalLimiter,
+  validateScheduledId,
   smsController.cancelScheduledMessage
 );
 
@@ -280,6 +336,143 @@ router.post(
   generalLimiter,
   validate(smsValidator.checkScheduledUpdatesSchema),
   smsController.getScheduledMessageUpdates
+);
+
+/**
+ * @route POST /api/sms/scheduled/force-process
+ * @desc Manually trigger scheduled message processing (admin/debug)
+ * @access Private
+ */
+router.post(
+  '/scheduled/force-process',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      // Only allow in development or for admin users
+      if (process.env.NODE_ENV === 'production' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions',
+          error: { code: 'FORBIDDEN' }
+        });
+      }
+      
+      const workers = require('../workers');
+      const result = await workers.forceProcessScheduledMessages();
+      
+      res.json({
+        success: true,
+        data: result,
+        message: 'Scheduled message processing triggered successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route GET /api/sms/scheduled/stats
+ * @desc Get scheduled message statistics
+ * @access Private
+ */
+router.get(
+  '/scheduled/stats',
+  authenticate,
+  generalLimiter,
+  async (req, res, next) => {
+    try {
+      const db = require('../models');
+      const { Op } = require('sequelize');
+      const userId = req.user.id;
+      
+      // Get comprehensive scheduled message stats
+      const [
+        totalScheduled,
+        pendingCount,
+        processingCount,
+        sentCount,
+        failedCount,
+        cancelledCount,
+        upcomingToday,
+        upcomingThisWeek
+      ] = await Promise.all([
+        db.ScheduledMessage.count({ where: { userId } }),
+        db.ScheduledMessage.count({ where: { userId, status: 'pending' } }),
+        db.ScheduledMessage.count({ where: { userId, status: 'processing' } }),
+        db.ScheduledMessage.count({ where: { userId, status: 'sent' } }),
+        db.ScheduledMessage.count({ where: { userId, status: 'failed' } }),
+        db.ScheduledMessage.count({ where: { userId, status: 'cancelled' } }),
+        db.ScheduledMessage.count({
+          where: {
+            userId,
+            status: 'pending',
+            scheduledAt: {
+              [Op.between]: [
+                new Date(new Date().setHours(0, 0, 0, 0)),
+                new Date(new Date().setHours(23, 59, 59, 999))
+              ]
+            }
+          }
+        }),
+        db.ScheduledMessage.count({
+          where: {
+            userId,
+            status: 'pending',
+            scheduledAt: {
+              [Op.between]: [
+                new Date(),
+                new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+              ]
+            }
+          }
+        })
+      ]);
+      
+      // Get next upcoming message
+      const nextMessage = await db.ScheduledMessage.findOne({
+        where: {
+          userId,
+          status: 'pending',
+          scheduledAt: { [Op.gt]: new Date() }
+        },
+        order: [['scheduledAt', 'ASC']],
+        attributes: ['id', 'scheduledAt', 'recipientCount', 'type']
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          total: totalScheduled,
+          breakdown: {
+            pending: pendingCount,
+            processing: processingCount,
+            sent: sentCount,
+            failed: failedCount,
+            cancelled: cancelledCount
+          },
+          upcoming: {
+            today: upcomingToday,
+            thisWeek: upcomingThisWeek,
+            next: nextMessage ? {
+              id: nextMessage.id,
+              scheduledAt: nextMessage.scheduledAt,
+              recipientCount: nextMessage.recipientCount,
+              type: nextMessage.type
+            } : null
+          },
+          rates: {
+            successRate: totalScheduled > 0 ? Math.round((sentCount / totalScheduled) * 100) : 0,
+            failureRate: totalScheduled > 0 ? Math.round((failedCount / totalScheduled) * 100) : 0,
+            cancellationRate: totalScheduled > 0 ? Math.round((cancelledCount / totalScheduled) * 100) : 0
+          }
+        },
+        message: 'Scheduled message statistics retrieved successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 );
 
 // =====================================
@@ -700,7 +893,7 @@ router.post(
           localNumbers.push(number);
         }
       });
-      
+
       res.json({
         success: true,
         data: {
@@ -1128,6 +1321,47 @@ router.get(
   }
 );
 
+/**
+ * @route GET /api/sms/worker-health
+ * @desc Get worker health status (admin/debug)
+ * @access Private
+ */
+router.get(
+  '/worker-health',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      // Only allow in development or for admin users
+      if (process.env.NODE_ENV === 'production' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions',
+          error: { code: 'FORBIDDEN' }
+        });
+      }
+      
+      const workers = require('../workers');
+      const [health, queueStats] = await Promise.all([
+        workers.getWorkerHealth(),
+        workers.getQueueStats()
+      ]);
+      
+      res.json({
+        success: true,
+        data: {
+          health,
+          queueStats,
+          timestamp: new Date().toISOString(),
+          environment: process.env.NODE_ENV
+        },
+        message: 'Worker health status retrieved successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // =====================================
 // WEBHOOK ENDPOINTS
 // =====================================
@@ -1507,6 +1741,108 @@ if (process.env.NODE_ENV === 'development') {
     }
   );
 }
+
+// =====================================
+// QUEUE MANAGEMENT ROUTES (Admin only)
+// =====================================
+
+/**
+ * @route POST /api/sms/queue/:queueName/pause
+ * @desc Pause queue processing (admin only)
+ * @access Private (Admin)
+ */
+router.post(
+  '/queue/:queueName/pause',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required',
+          error: { code: 'INSUFFICIENT_PERMISSIONS' }
+        });
+      }
+      
+      const { queueName } = req.params;
+      const workers = require('../workers');
+      const result = await workers.pauseQueue(queueName);
+      
+      res.json({
+        success: true,
+        data: result,
+        message: `Queue ${queueName} paused successfully`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route POST /api/sms/queue/:queueName/resume
+ * @desc Resume queue processing (admin only)
+ * @access Private (Admin)
+ */
+router.post(
+  '/queue/:queueName/resume',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required',
+          error: { code: 'INSUFFICIENT_PERMISSIONS' }
+        });
+      }
+      
+      const { queueName } = req.params;
+      const workers = require('../workers');
+      const result = await workers.resumeQueue(queueName);
+      
+      res.json({
+        success: true,
+        data: result,
+        message: `Queue ${queueName} resumed successfully`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route POST /api/sms/queue/cleanup
+ * @desc Clean up failed jobs in queues (admin only)
+ * @access Private (Admin)
+ */
+router.post(
+  '/queue/cleanup',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin access required',
+          error: { code: 'INSUFFICIENT_PERMISSIONS' }
+        });
+      }
+      
+      const workers = require('../workers');
+      const result = await workers.cleanupFailedJobs();
+      
+      res.json({
+        success: true,
+        data: result,
+        message: 'Queue cleanup completed successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // =====================================
 // EXPORT ROUTER

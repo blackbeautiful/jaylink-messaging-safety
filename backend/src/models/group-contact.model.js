@@ -1,52 +1,61 @@
-// backend/src/models/group-contact.model.js - Fixed version
+// backend/src/models/group-contact.model.js - Fixed version without auto ID
 /**
- * Group-Contact junction model
+ * Group-Contact junction model for many-to-many relationship
  * @param {Object} sequelize - Sequelize instance
  * @param {Object} DataTypes - Sequelize data types
  * @returns {Object} GroupContact model
  */
 module.exports = (sequelize, DataTypes) => {
   const GroupContact = sequelize.define('GroupContact', {
-    // Removed the explicit id field - let Sequelize handle it automatically
     groupId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      primaryKey: true, // Part of composite primary key
       references: {
         model: 'groups',
         key: 'id',
       },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
     },
     contactId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      primaryKey: true, // Part of composite primary key
       references: {
         model: 'contacts',
         key: 'id',
       },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
     },
     createdAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
+      allowNull: false,
     },
   }, {
     tableName: 'group_contacts',
     timestamps: true,
-    updatedAt: false,
+    updatedAt: false, // Only track creation time
+    // Composite primary key
     indexes: [
-      {
-        name: 'idx_group_id',
-        fields: ['groupId'],
-      },
-      {
-        name: 'idx_contact_id',
-        fields: ['contactId'],
-      },
       {
         unique: true,
         fields: ['groupId', 'contactId'],
-        name: 'unique_group_contact',
+        name: 'group_contact_unique',
+      },
+      {
+        fields: ['groupId'],
+        name: 'idx_group_contacts_group_id',
+      },
+      {
+        fields: ['contactId'],
+        name: 'idx_group_contacts_contact_id',
       },
     ],
+    // Disable auto ID generation
+    id: false,
   });
 
   // Define associations

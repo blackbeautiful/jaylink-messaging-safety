@@ -61,15 +61,29 @@ const createGroup = async (userId, groupData) => {
         throw new ApiError('One or more contacts not found or do not belong to you', 404);
       }
 
-      // Create group-contact associations
+      // Create group-contact associations using raw insert to avoid ID conflicts
       const associations = groupData.contactIds.map(contactId => ({
         groupId: group.id,
         contactId: parseInt(contactId),
+        createdAt: new Date(),
       }));
 
-      await GroupContact.bulkCreate(associations, { 
-        transaction,
-        ignoreDuplicates: true 
+      // Use raw SQL insert instead of bulkCreate to avoid ID field issues
+      const insertQuery = `
+        INSERT IGNORE INTO group_contacts (groupId, contactId, createdAt) 
+        VALUES ${associations.map(() => '(?, ?, ?)').join(', ')}
+      `;
+      
+      const insertValues = associations.flatMap(assoc => [
+        assoc.groupId, 
+        assoc.contactId, 
+        assoc.createdAt
+      ]);
+
+      await db.sequelize.query(insertQuery, {
+        replacements: insertValues,
+        type: db.sequelize.QueryTypes.INSERT,
+        transaction
       });
 
       contactCount = contacts.length;
@@ -213,14 +227,14 @@ const getGroupById = async (userId, groupId) => {
   }
 };
 
-/**
- * Update a group with proper contact management
- * @param {number} userId - User ID
- * @param {number} groupId - Group ID
- * @param {Object} groupData - Group data to update
- * @returns {Object} Updated group
- */
-const updateGroup = async (userId, groupId, groupData) => {
+ /**
+   * Update a group with proper contact management
+   * @param {number} userId - User ID
+   * @param {number} groupId - Group ID
+   * @param {Object} groupData - Group data to update
+   * @returns {Object} Updated group
+   */
+ const updateGroup = async (userId, groupId, groupData) => {
   const transaction = await db.sequelize.transaction();
   
   try {
@@ -276,40 +290,62 @@ const updateGroup = async (userId, groupId, groupData) => {
         }
       }
 
-      // Remove all existing associations
-      await GroupContact.destroy({
-        where: { groupId },
-        transaction
-      });
+      // Remove all existing associations using raw SQL
+      await db.sequelize.query(
+        'DELETE FROM group_contacts WHERE groupId = ?',
+        {
+          replacements: [groupId],
+          type: db.sequelize.QueryTypes.DELETE,
+          transaction
+        }
+      );
 
-      // Add new associations
+      // Add new associations if any
       if (groupData.contactIds.length > 0) {
         const associations = groupData.contactIds.map(contactId => ({
           groupId: parseInt(groupId),
           contactId: parseInt(contactId),
+          createdAt: new Date(),
         }));
 
-        // Use bulkCreate with proper options to avoid ID conflicts
-        await GroupContact.bulkCreate(associations, {
-          transaction,
-          ignoreDuplicates: true,
-          validate: true
+        // Use raw SQL insert
+        const insertQuery = `
+          INSERT IGNORE INTO group_contacts (groupId, contactId, createdAt) 
+          VALUES ${associations.map(() => '(?, ?, ?)').join(', ')}
+        `;
+        
+        const insertValues = associations.flatMap(assoc => [
+          assoc.groupId, 
+          assoc.contactId, 
+          assoc.createdAt
+        ]);
+
+        await db.sequelize.query(insertQuery, {
+          replacements: insertValues,
+          type: db.sequelize.QueryTypes.INSERT,
+          transaction
         });
       }
     }
 
-    // Get updated group with contact count
-    const contactCount = await GroupContact.count({
-      where: { groupId },
-      transaction
-    });
+    // Get updated contact count
+    const contactCountResult = await db.sequelize.query(
+      'SELECT COUNT(*) as count FROM group_contacts WHERE groupId = ?',
+      {
+        replacements: [groupId],
+        type: db.sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+    
+    const contactCount = contactCountResult[0]?.count || 0;
 
     await transaction.commit();
 
     const updatedGroup = group.toJSON();
     return {
       ...updatedGroup,
-      contactCount
+      contactCount: parseInt(contactCount)
     };
   } catch (error) {
     await transaction.rollback();

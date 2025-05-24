@@ -1,10 +1,10 @@
-// backend/src/controllers/group.controller.js - Complete Fixed version with better error handling
+// backend/src/controllers/group.controller.js - Fixed version with proper contact handling
 const groupService = require('../services/group.service');
 const response = require('../utils/response.util');
 const logger = require('../config/logger');
 
 /**
- * Create a new group
+ * Create a new group with optional contacts
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
@@ -14,15 +14,25 @@ const createGroup = async (req, res, next) => {
     const userId = req.user.id;
     const groupData = req.body;
     
+    // Log the incoming data for debugging
+    logger.info('Creating group with data:', { userId, groupData });
+    
     // Validate required fields
     if (!groupData.name || !groupData.name.trim()) {
       return response.error(res, 'Group name is required', 400);
     }
     
-    const group = await groupService.createGroup(userId, {
+    // Prepare group data
+    const processedGroupData = {
       name: groupData.name.trim(),
-      description: groupData.description ? groupData.description.trim() : undefined
-    });
+      description: groupData.description ? groupData.description.trim() : undefined,
+      contactIds: Array.isArray(groupData.contactIds) ? groupData.contactIds : undefined
+    };
+    
+    // Log processed data
+    logger.info('Processed group data:', { processedGroupData });
+    
+    const group = await groupService.createGroup(userId, processedGroupData);
     
     return response.success(res, { group }, 'Group created successfully', 201);
   } catch (error) {
@@ -108,6 +118,9 @@ const updateGroup = async (req, res, next) => {
     const groupId = req.params.id;
     const groupData = req.body;
     
+    // Log the incoming data for debugging
+    logger.info('Updating group with data:', { userId, groupId, groupData });
+    
     // Validate group ID
     if (!groupId || isNaN(groupId)) {
       return response.error(res, 'Invalid group ID', 400);
@@ -132,6 +145,7 @@ const updateGroup = async (req, res, next) => {
         .map(id => parseInt(id));
       
       updateData.contactIds = validContactIds;
+      logger.info('Valid contact IDs for update:', { validContactIds });
     }
     
     const group = await groupService.updateGroup(userId, parseInt(groupId), updateData);

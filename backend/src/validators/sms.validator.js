@@ -138,20 +138,53 @@ const scheduledMessagesSchema = Joi.object({
 });
 
 /**
- * Batch delete validation schema
+ * Batch delete validation schema - FIXED to accept both numbers and strings
  */
 const batchDeleteSchema = Joi.object({
   messageIds: Joi.array()
-    .items(Joi.string().required().messages({
-      'string.empty': 'Message ID cannot be empty',
-      'any.required': 'Message ID is required'
-    }))
+    .items(
+      Joi.alternatives().try(
+        Joi.string().required(),
+        Joi.number().integer().positive().required()
+      ).messages({
+        'alternatives.match': 'Message ID must be a string or number',
+        'any.required': 'Message ID is required'
+      })
+    )
     .min(1)
     .max(100)
     .required()
     .messages({
       'array.base': 'Message IDs must be an array',
       'array.min': 'At least one message ID is required',
+      'array.max': 'Cannot delete more than 100 messages at once',
+      'any.required': 'Message IDs are required'
+    })
+});
+
+/**
+ * Enhanced batch delete validation schema with transformation
+ */
+const enhancedBatchDeleteSchema = Joi.object({
+  messageIds: Joi.array()
+    .items(
+      Joi.alternatives().try(
+        Joi.string().required(),
+        Joi.number().integer().positive().required().custom((value) => {
+          return value.toString(); // Convert number to string
+        })
+      )
+    )
+    .min(1)
+    .max(100)
+    .required()
+    .custom((value) => {
+      // Transform all items to strings
+      return value.map(id => typeof id === 'number' ? id.toString() : id);
+    })
+    .messages({
+      'array.base': 'Message IDs must be an array',
+      'array.min': 'At least one message ID is required',  
       'array.max': 'Cannot delete more than 100 messages at once',
       'any.required': 'Message IDs are required'
     })
@@ -399,6 +432,7 @@ module.exports = {
   messageHistorySchema,
   scheduledMessagesSchema,
   batchDeleteSchema,
+  enhancedBatchDeleteSchema,
   exportHistorySchema,
   checkScheduledUpdatesSchema,
   costEstimateSchema,

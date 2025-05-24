@@ -1,4 +1,4 @@
-// backend/src/services/group.service.js - Fixed version with proper contact relationships
+// backend/src/services/group.service.js 
 const { Op } = require('sequelize');
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
@@ -10,15 +10,17 @@ const GroupContact = db.GroupContact;
 const User = db.User;
 
 /**
- * Create a new group
+ * Create a new group with optional contacts
  * @param {number} userId - User ID
  * @param {Object} groupData - Group data
  * @returns {Object} Created group
  */
 const createGroup = async (userId, groupData) => {
+  const transaction = await db.sequelize.transaction();
+  
   try {
     // Check if user exists
-    const user = await User.findByPk(userId);
+    const user = await User.findByPk(userId, { transaction });
     if (!user) {
       throw new ApiError('User not found', 404);
     }
@@ -29,6 +31,7 @@ const createGroup = async (userId, groupData) => {
         userId,
         name: groupData.name,
       },
+      transaction
     });
 
     if (existingGroup) {
@@ -37,17 +40,51 @@ const createGroup = async (userId, groupData) => {
 
     // Create group
     const group = await Group.create({
-      ...groupData,
+      name: groupData.name,
+      description: groupData.description,
       userId,
-    });
+    }, { transaction });
+
+    // Add contacts if provided
+    let contactCount = 0;
+    if (Array.isArray(groupData.contactIds) && groupData.contactIds.length > 0) {
+      // Verify all contacts belong to the user
+      const contacts = await Contact.findAll({
+        where: {
+          id: { [Op.in]: groupData.contactIds },
+          userId,
+        },
+        transaction
+      });
+
+      if (contacts.length !== groupData.contactIds.length) {
+        throw new ApiError('One or more contacts not found or do not belong to you', 404);
+      }
+
+      // Create group-contact associations
+      const associations = groupData.contactIds.map(contactId => ({
+        groupId: group.id,
+        contactId: parseInt(contactId),
+      }));
+
+      await GroupContact.bulkCreate(associations, { 
+        transaction,
+        ignoreDuplicates: true 
+      });
+
+      contactCount = contacts.length;
+    }
+
+    await transaction.commit();
 
     // Return group with contact count
     const groupWithCount = group.toJSON();
     return {
       ...groupWithCount,
-      contactCount: 0
+      contactCount
     };
   } catch (error) {
+    await transaction.rollback();
     logger.error(`Create group error: ${error.message}`, { stack: error.stack, userId, groupData });
     throw error;
   }
@@ -177,7 +214,7 @@ const getGroupById = async (userId, groupId) => {
 };
 
 /**
- * Update a group
+ * Update a group with proper contact management
  * @param {number} userId - User ID
  * @param {number} groupId - Group ID
  * @param {Object} groupData - Group data to update
@@ -252,7 +289,12 @@ const updateGroup = async (userId, groupId, groupData) => {
           contactId: parseInt(contactId),
         }));
 
-        await GroupContact.bulkCreate(associations, { transaction });
+        // Use bulkCreate with proper options to avoid ID conflicts
+        await GroupContact.bulkCreate(associations, {
+          transaction,
+          ignoreDuplicates: true,
+          validate: true
+        });
       }
     }
 
@@ -271,7 +313,13 @@ const updateGroup = async (userId, groupId, groupData) => {
     };
   } catch (error) {
     await transaction.rollback();
-    logger.error(`Update group error: ${error.message}`, { stack: error.stack, userId, groupId, groupData });
+    logger.error(`Update group error: ${error.message}`, { 
+      stack: error.stack, 
+      userId, 
+      groupId, 
+      groupData,
+      errorDetails: error.sql || error.original || error.parent
+    });
     throw error;
   }
 };
@@ -374,7 +422,10 @@ const addContactsToGroup = async (userId, groupId, contactIds) => {
         contactId: parseInt(contactId),
       }));
 
-      await GroupContact.bulkCreate(associations, { transaction });
+      await GroupContact.bulkCreate(associations, { 
+        transaction,
+        ignoreDuplicates: true 
+      });
     }
 
     await transaction.commit();

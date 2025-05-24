@@ -1265,11 +1265,18 @@ const deleteMessage = async (userId, messageId) => {
       throw new ApiError('User not found', 404);
     }
 
+    // Normalize message ID to number for database query
+    const normalizedMessageId = typeof messageId === 'string' ? parseInt(messageId, 10) : messageId;
+    
+    if (isNaN(normalizedMessageId) || normalizedMessageId <= 0) {
+      throw new ApiError('Invalid message ID format', 400);
+    }
+
     // Find the message
     const message = await Message.findOne({
       where: {
         userId,
-        id: messageId, // Using database ID, not messageId field
+        id: normalizedMessageId, // Using database ID, not messageId field
       },
     });
 
@@ -1282,34 +1289,68 @@ const deleteMessage = async (userId, messageId) => {
       throw new ApiError('Cannot delete message that is currently being processed', 400);
     }
 
+    // Store message details for response
+    const messageDetails = {
+      id: message.id,
+      messageId: message.messageId,
+      type: message.type,
+      recipientCount: message.recipientCount,
+      cost: message.cost,
+      status: message.status,
+      createdAt: message.createdAt
+    };
+
     // Delete the message
     await message.destroy();
 
+    // Create notification for single delete
+    notificationService.createNotification(
+      userId,
+      'Message Deleted',
+      `Successfully deleted ${message.type.toUpperCase()} message to ${message.recipientCount} recipient(s).`,
+      'info',
+      {
+        action: 'message-deleted',
+        messageId: message.messageId,
+        originalId: message.id,
+        type: message.type,
+        recipientCount: message.recipientCount,
+        cost: message.cost,
+        timestamp: new Date().toISOString()
+      },
+      false // Don't send email for routine operations
+    ).catch(err => logger.error(`Failed to create delete notification: ${err.message}`));
+
     logger.info(`Message deleted successfully`, { 
       userId, 
-      messageId, 
-      originalMessageId: message.messageId 
+      requestedMessageId: messageId,
+      normalizedMessageId,
+      actualMessageId: message.messageId,
+      messageType: message.type,
+      recipientCount: message.recipientCount
     });
 
     return {
-      messageId: message.id,
+      messageId: normalizedMessageId,
       originalMessageId: message.messageId,
       deleted: true,
+      details: messageDetails
     };
   } catch (error) {
     logger.error(`Delete message error: ${error.message}`, { 
       stack: error.stack, 
       userId,
-      messageId 
+      messageId,
+      errorType: error.constructor.name
     });
     throw error;
   }
 };
 
 /**
- * Delete multiple messages (batch delete)
+ * Delete multiple messages (batch delete) - FIXED to handle both string and number IDs
  * @param {number} userId - User ID
- * @param {Array} messageIds - Array of message IDs to delete
+ * @param {Array} messageIds - Array of message IDs to delete (can be strings or numbers)
  * @returns {Object} Batch deletion result
  */
 const batchDeleteMessages = async (userId, messageIds) => {
@@ -1322,22 +1363,48 @@ const batchDeleteMessages = async (userId, messageIds) => {
       throw new ApiError('User not found', 404);
     }
 
+    // Normalize message IDs to ensure they're all numbers for database queries
+    const normalizedMessageIds = messageIds.map(id => {
+      // Convert to number if it's a string that represents a number
+      const numId = typeof id === 'string' ? parseInt(id, 10) : id;
+      
+      // Validate that it's a valid number
+      if (isNaN(numId) || numId <= 0) {
+        throw new ApiError(`Invalid message ID: ${id}`, 400);
+      }
+      
+      return numId;
+    });
+
+    logger.debug('Batch delete request', {
+      userId,
+      originalIds: messageIds,
+      normalizedIds: normalizedMessageIds,
+      count: normalizedMessageIds.length
+    });
+
     // Find all messages that belong to the user
     const messages = await Message.findAll({
       where: {
         userId,
-        id: { [Op.in]: messageIds },
+        id: { [Op.in]: normalizedMessageIds },
       },
       transaction: t
     });
 
     if (messages.length === 0) {
+      await t.rollback();
       throw new ApiError('No messages found to delete', 404);
     }
+
+    // Check for messages that weren't found
+    const foundIds = messages.map(msg => msg.id);
+    const notFoundIds = normalizedMessageIds.filter(id => !foundIds.includes(id));
 
     // Check if any messages are currently being processed
     const processingMessages = messages.filter(msg => msg.status === 'processing');
     if (processingMessages.length > 0) {
+      await t.rollback();
       throw new ApiError(
         `Cannot delete ${processingMessages.length} message(s) that are currently being processed`,
         400
@@ -1348,32 +1415,68 @@ const batchDeleteMessages = async (userId, messageIds) => {
     const deleteResult = await Message.destroy({
       where: {
         userId,
-        id: { [Op.in]: messages.map(msg => msg.id) },
+        id: { [Op.in]: foundIds },
       },
       transaction: t
     });
 
     await t.commit();
 
-    logger.info(`Batch delete completed`, { 
+    // Create notification for successful batch delete
+    if (messages.length > 0) {
+      notificationService.createNotification(
+        userId,
+        'Messages Deleted',
+        `Successfully deleted ${messages.length} message(s) from your history.`,
+        'info',
+        {
+          action: 'batch-delete-completed',
+          deletedCount: messages.length,
+          requestedCount: messageIds.length,
+          notFoundCount: notFoundIds.length,
+          timestamp: new Date().toISOString()
+        },
+        false // Don't send email for routine operations
+      ).catch(err => logger.error(`Failed to create batch delete notification: ${err.message}`));
+    }
+
+    logger.info(`Batch delete completed successfully`, { 
       userId, 
       requestedCount: messageIds.length,
       foundCount: messages.length,
-      deletedCount: deleteResult
+      deletedCount: deleteResult,
+      notFoundCount: notFoundIds.length
     });
 
     return {
       requested: messageIds.length,
       found: messages.length,
       deletedCount: deleteResult,
-      notFound: messageIds.length - messages.length,
+      notFound: notFoundIds.length,
+      notFoundIds: notFoundIds,
+      deletedMessages: messages.map(msg => ({
+        id: msg.id,
+        messageId: msg.messageId,
+        type: msg.type,
+        recipientCount: msg.recipientCount,
+        cost: msg.cost
+      })),
+      summary: {
+        totalCostDeleted: messages.reduce((sum, msg) => sum + (msg.cost || 0), 0),
+        messageTypes: messages.reduce((acc, msg) => {
+          acc[msg.type] = (acc[msg.type] || 0) + 1;
+          return acc;
+        }, {}),
+        totalRecipients: messages.reduce((sum, msg) => sum + (msg.recipientCount || 0), 0)
+      }
     };
   } catch (error) {
     await t.rollback();
     logger.error(`Batch delete messages error: ${error.message}`, { 
       stack: error.stack, 
       userId, 
-      messageIds
+      messageIds: messageIds,
+      errorType: error.constructor.name
     });
     throw error;
   }

@@ -42,6 +42,8 @@ import {
   CreditCard,
   Loader2,
   HelpCircle,
+  Clock,
+  History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import NotificationMenu from "@/components/NotificationMenu";
@@ -149,7 +151,7 @@ const DashboardLayout = ({ children, title, backLink, currentPath }: DashboardLa
       { name: "Balance", icon: <Wallet size={20} />, path: "/balance" },
       { name: "Groups", icon: <Users size={20} />, path: "/groups" },
       { name: "Scheduled", icon: <Calendar size={20} />, path: "/scheduled" },
-      { name: "History", icon: <Settings size={20} />, path: "/sms/history" },
+      { name: "History", icon: <History size={20} />, path: "/sms/history" },
     ],
     []
   );

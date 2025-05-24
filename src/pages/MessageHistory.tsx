@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/pages/MessageHistory.tsx - Enhanced with full backend integration
+// src/pages/MessageHistory.tsx - COMPLETE FIXED VERSION
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -77,7 +77,7 @@ import { Badge } from "@/components/ui/badge";
 
 // Types
 interface Message {
-  id: string;
+  id: string | number; // Can be either string or number from backend
   messageId: string;
   type: 'sms' | 'voice' | 'audio';
   content: string;
@@ -120,7 +120,6 @@ interface FilterState {
   search: string;
 }
 
-// Data cache for optimization
 interface MessageCache {
   data: Message[];
   pagination: PaginationInfo;
@@ -151,7 +150,7 @@ const MessageHistory = () => {
   // UI State
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]); // Always strings
   const [selectAll, setSelectAll] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
@@ -173,10 +172,30 @@ const MessageHistory = () => {
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Currency configuration
-const [currencyConfig, setCurrencyConfig] = useState({
+  const [currencyConfig, setCurrencyConfig] = useState({
     symbol: CURRENCY_SYMBOL,
     code: 'NGN'
   });
+
+  // Helper functions
+  const normalizeMessageId = (id: string | number): string => {
+    return typeof id === 'number' ? id.toString() : id;
+  };
+
+  const validateMessageIds = (ids: (string | number)[]): string[] => {
+    return ids.map(id => normalizeMessageId(id));
+  };
+
+  const logDeleteAttempt = (type: 'single' | 'batch', data: any) => {
+    console.log(`${type} delete attempt:`, {
+      type,
+      data,
+      dataTypes: Array.isArray(data) 
+        ? data.map(item => ({ value: item, type: typeof item }))
+        : { value: data, type: typeof data },
+      timestamp: new Date().toISOString()
+    });
+  };
 
   // Memoized stats
   const stats = useMemo(() => {
@@ -251,6 +270,7 @@ const [currencyConfig, setCurrencyConfig] = useState({
         // Process messages to ensure proper data types
         const processedMessages = fetchedMessages.map((message: any) => ({
           ...message,
+          id: normalizeMessageId(message.id), // Normalize ID to string
           cost: typeof message.cost === 'number' ? message.cost : parseFloat(message.cost) || 0,
           recipients: Array.isArray(message.recipients) 
             ? message.recipients 
@@ -458,18 +478,45 @@ const [currencyConfig, setCurrencyConfig] = useState({
     setDeleteDialogOpen(true);
   };
 
+  // FIXED: Main delete function with proper ID handling
   const confirmDelete = async () => {
     try {
       setActionLoading('delete');
       
       if (isBatchDelete) {
-        // Batch delete API call
+        // Batch delete API call - FIXED: Ensure IDs are strings
+        const messageIdsAsStrings = validateMessageIds(selectedItems);
+        
+        logDeleteAttempt('batch', {
+          originalIds: selectedItems,
+          convertedIds: messageIdsAsStrings,
+          count: selectedItems.length
+        });
+        
         const response = await api.post('/sms/batch-delete', { 
-          messageIds: selectedItems 
+          messageIds: messageIdsAsStrings // Send as strings
         });
         
         if (response.data.success) {
-          toast.success(`${selectedItems.length} messages deleted successfully`);
+          const result = response.data.data;
+          const successMessage = result.notFound && result.notFound > 0 
+            ? `${result.deletedCount} messages deleted successfully (${result.notFound} messages were not found)`
+            : `${result.deletedCount} messages deleted successfully`;
+            
+          toast.success(successMessage);
+          
+          // Show additional details if some messages weren't found
+          if (result.notFound > 0) {
+            toast.info(`${result.notFound} messages were already deleted or not found`, {
+              description: `Requested: ${result.requested}, Found: ${result.found}, Deleted: ${result.deletedCount}`
+            });
+          }
+          
+          // Show cost summary if available
+          if (result.summary?.totalCostDeleted > 0) {
+            toast.info(`Total cost of deleted messages: ${formatCurrency(result.summary.totalCostDeleted, currencyConfig.symbol)}`);
+          }
+          
           setSelectedItems([]);
           setSelectAll(false);
           
@@ -480,22 +527,61 @@ const [currencyConfig, setCurrencyConfig] = useState({
           throw new Error(response.data.message || 'Failed to delete messages');
         }
       } else if (messageToDelete) {
-        // Single delete API call
-        const response = await api.delete(`/sms/delete/${messageToDelete.id}`);
+        // Single delete API call - FIXED: Ensure ID is string
+        const messageIdAsString = normalizeMessageId(messageToDelete.id);
+        
+        logDeleteAttempt('single', {
+          originalId: messageToDelete.id,
+          convertedId: messageIdAsString,
+          messageId: messageToDelete.messageId
+        });
+        
+        const response = await api.delete(`/sms/delete/${messageIdAsString}`);
         
         if (response.data.success) {
           toast.success("Message deleted successfully");
           
-          // Remove message from list locally
-          setMessages(prev => prev.filter(m => m.id !== messageToDelete.id));
-          setPagination(prev => ({ ...prev, total: prev.total - 1 }));
+          // Remove message from list locally for immediate UI feedback
+          setMessages(prev => prev.filter(m => normalizeMessageId(m.id) !== messageIdAsString));
+          setPagination(prev => ({ 
+            ...prev, 
+            total: Math.max(0, prev.total - 1) 
+          }));
+          
+          // Also remove from selection if it was selected
+          setSelectedItems(prev => prev.filter(id => id !== messageIdAsString));
+          
+          // Update selectAll state
+          setSelectAll(false);
         } else {
           throw new Error(response.data.message || 'Failed to delete message');
         }
       }
     } catch (error: any) {
       console.error("Error deleting message(s):", error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete message(s)';
+      
+      // Enhanced error handling
+      let errorMessage = 'Failed to delete message(s)';
+      
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Show specific error details for validation errors
+      if (error.response?.status === 422) {
+        errorMessage = 'Validation error: Please check your selection and try again';
+        console.error('Validation details:', error.response.data);
+        
+        // Log detailed validation error for debugging
+        if (error.response.data.errors) {
+          console.error('Validation errors:', error.response.data.errors);
+        }
+      }
+      
       toast.error(errorMessage);
     } finally {
       setActionLoading(null);
@@ -504,21 +590,25 @@ const [currencyConfig, setCurrencyConfig] = useState({
     }
   };
 
-  // Selection handlers
+  // FIXED: Selection handlers to ensure consistent ID types
   const toggleSelectAll = () => {
     if (selectAll) {
       setSelectedItems([]);
     } else {
-      setSelectedItems(messages.map(message => message.id));
+      // Ensure all IDs are strings for consistency
+      setSelectedItems(messages.map(message => normalizeMessageId(message.id)));
     }
     setSelectAll(!selectAll);
   };
 
-  const toggleSelectItem = (messageId: string) => {
+  const toggleSelectItem = (messageId: string | number) => {
+    // Ensure messageId is a string
+    const idAsString = normalizeMessageId(messageId);
+    
     setSelectedItems(prev => {
-      const newSelection = prev.includes(messageId)
-        ? prev.filter(id => id !== messageId)
-        : [...prev, messageId];
+      const newSelection = prev.includes(idAsString)
+        ? prev.filter(id => id !== idAsString)
+        : [...prev, idAsString];
       
       setSelectAll(newSelection.length === messages.length);
       return newSelection;
@@ -841,17 +931,18 @@ const [currencyConfig, setCurrencyConfig] = useState({
                   <TableBody>
                     {messages.map((message) => {
                       const statusDisplay = getStatusDisplay(message.status);
+                      const messageIdString = normalizeMessageId(message.id);
                       
                       return (
                         <TableRow 
-                          key={message.id}
-                          className={selectedItems.includes(message.id) ? "bg-muted/50" : ""}
+                          key={messageIdString}
+                          className={selectedItems.includes(messageIdString) ? "bg-muted/50" : ""}
                         >
                           <TableCell>
                             <Checkbox 
-                              checked={selectedItems.includes(message.id)} 
+                              checked={selectedItems.includes(messageIdString)} 
                               onCheckedChange={() => toggleSelectItem(message.id)} 
-                              aria-label={`Select message ${message.id}`} 
+                              aria-label={`Select message ${messageIdString}`} 
                             />
                           </TableCell>
                           <TableCell className="font-medium">
@@ -885,7 +976,7 @@ const [currencyConfig, setCurrencyConfig] = useState({
                                 {message.recipientCount} recipient(s)
                               </div>
                             </div>
-                            </TableCell>
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span className={statusDisplay.color}>
@@ -988,10 +1079,18 @@ const [currencyConfig, setCurrencyConfig] = useState({
                 ? ` the selected ${selectedItems.length} messages` 
                 : " this message"} 
               from our servers.
+              {isBatchDelete && selectedItems.length > 10 && (
+                <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded text-sm">
+                  <strong>Note:</strong> You are about to delete {selectedItems.length} messages. 
+                  Please confirm this is intentional.
+                </div>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={!!actionLoading}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
               disabled={!!actionLoading}
@@ -1003,12 +1102,33 @@ const [currencyConfig, setCurrencyConfig] = useState({
                   Deleting...
                 </>
               ) : (
-                'Delete'
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {isBatchDelete ? `Delete ${selectedItems.length} Messages` : 'Delete Message'}
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Debug information (only in development) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 max-w-sm">
+          <details className="bg-black/80 text-white p-2 rounded text-xs">
+            <summary className="cursor-pointer">Debug Info</summary>
+            <div className="mt-2 space-y-1">
+              <div>Selected Items: {selectedItems.length}</div>
+              <div>Selected IDs: {selectedItems.slice(0, 3).join(', ')}{selectedItems.length > 3 ? '...' : ''}</div>
+              <div>Messages: {messages.length}</div>
+              <div>Loading: {loading.toString()}</div>
+              <div>Action Loading: {actionLoading || 'none'}</div>
+              <div>Cache Valid: {messageCache ? 'yes' : 'no'}</div>
+              <div>Error: {error ? error.substring(0, 50) : 'none'}</div>
+            </div>
+          </details>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

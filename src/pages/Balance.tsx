@@ -1,3 +1,4 @@
+// src/pages/Balance.tsx - Enhanced with full backend integration
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -16,8 +17,7 @@ const Balance = () => {
       backLink="/dashboard"
       currentPath={location.pathname}
     >
-      {/* Removed fixed width constraint to make it fully responsive */}
-      <div className="w-full">
+      <div className="w-full space-y-6">
         <BalanceOverview />
       </div>
     </DashboardLayout>

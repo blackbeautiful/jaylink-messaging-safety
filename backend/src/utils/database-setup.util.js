@@ -429,6 +429,8 @@ class DatabaseSetupManager {
       operations: [],
       warnings: [],
       errors: [],
+      criticalErrors: [],
+      nonCriticalErrors: [],
     };
 
     try {
@@ -651,7 +653,7 @@ class DatabaseSetupManager {
   }
 
   /**
-   * Analyze existing database schema
+   * Analyze existing database schema with better error handling
    * @private
    */
   async analyzeExistingSchema() {
@@ -669,13 +671,13 @@ class DatabaseSetupManager {
       });
 
       if (tableAnalysis.issues.length > 0) {
-        logger.warn('⚠️  Schema issues detected:', tableAnalysis.issues);
+        logger.warn('⚠️  Schema issues detected:', tableAnalysis.issues.slice(0, 5)); // Limit log output
       }
 
       return tableAnalysis;
     } catch (error) {
-      logger.error('❌ Schema analysis failed:', error);
-      return { existingTables: [], totalIndexes: 0, issues: [] };
+      logger.warn('⚠️  Schema analysis failed:', error.message);
+      return { existingTables: [], totalIndexes: 0, issues: ['Schema analysis failed'] };
     }
   }
 
@@ -1732,17 +1734,34 @@ function createDatabaseSetupManager() {
 }
 
 /**
- * Main setup function (maintains backward compatibility)
- * @returns {Promise<boolean>} Success status
+ * Main setup function with enhanced error handling
+ * @returns {Promise<DatabaseSetupResult>} Detailed setup results
  */
 async function setupDatabase() {
   try {
     const manager = createDatabaseSetupManager();
     const result = await manager.setupDatabase();
-    return result.success;
+    
+    // Enhanced result handling
+    if (result.success) {
+      logger.info('✅ Database setup completed successfully');
+      return { success: true, shouldContinue: true, result };
+    } else if (result.shouldExit) {
+      logger.error('❌ Critical database setup failure - application should not start');
+      return { success: false, shouldContinue: false, result };
+    } else {
+      logger.warn('⚠️  Database setup completed with warnings - application can continue');
+      return { success: false, shouldContinue: true, result };
+    }
   } catch (error) {
-    logger.error('Database setup failed:', error);
-    return config.env !== 'production'; // Allow development to continue
+    logger.error('❌ Database setup failed with exception:', error.message);
+    
+    const isCritical = config.env === 'production';
+    return { 
+      success: false, 
+      shouldContinue: !isCritical, 
+      error: error.message 
+    };
   }
 }
 

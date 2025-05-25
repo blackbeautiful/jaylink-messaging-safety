@@ -1,35 +1,123 @@
-# Logs
-logs
-*.log
+# Node.js Dependencies
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Build outputs
+dist/
+dist-ssr/
+build/
+.next/
+out/
 
-write
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-# Environment 
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log
+
+# Environment files
 .env
+.env.local
+.env.development
+.env.test
+.env.production
 .env.dev
 .env.prod
 .env.mvp
-.env.example
+.env.staging
+# Keep .env.example for reference
+!.env.example
 
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Backups and temporary files
 backups/
+temp/
+tmp/
+*.tmp
+*.temp
+*.bak
+*.backup
+write/
+
+# Uploads (consider what should be tracked)
+uploads/
+!uploads/.gitkeep
+# If you want to track sample uploads:
+# !uploads/samples/
+
+# Cache directories
+.cache/
+.parcel-cache/
+.npm/
+.eslintcache
+.yarn/cache/
+.pnpm-store/
 
 # Editor directories and files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
-.idea
-.DS_Store
+!.vscode/settings.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# SSL certificates (if any)
+*.pem
+*.crt
+*.key
+ssl/
+certificates/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Performance and monitoring
+.nyc_output/
+coverage/
+*.tgz
+
+# Lock files (keep one type)
+package-lock.json
+# OR yarn.lock (choose one based on your package manager)
+
+# Testing
+test-results/
+coverage/
+.nyc_output/
+
+# Misc
+*.tsbuildinfo
+.npm
+.eslintcache
+.yarn-integrity

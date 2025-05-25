@@ -884,9 +884,19 @@ const NotificationMenu = () => {
                   size="sm" 
                   onClick={markAllAsRead}
                   className="text-xs"
+                  disabled={!!actionLoading}
                 >
-                  <Check className="mr-2 h-3 w-3" />
-                  Mark all as read
+                  {actionLoading === 'markAllRead' ? (
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      Marking...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="mr-2 h-3 w-3" />
+                      Mark all as read
+                    </>
+                  )}
                 </Button>
               )}
               <Button 
@@ -894,9 +904,19 @@ const NotificationMenu = () => {
                 size="sm" 
                 onClick={() => setDeleteAllConfirmOpen(true)}
                 className="text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 ml-auto"
+                disabled={!!actionLoading}
               >
-                <Trash2 className="mr-2 h-3 w-3" />
-                Delete all
+                {actionLoading === 'deleteAll' ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-3 w-3" />
+                    Delete all
+                  </>
+                )}
               </Button>
             </SheetFooter>
           )}
@@ -913,12 +933,20 @@ const NotificationMenu = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={!!actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleConfirmDelete}
               className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!!actionLoading}
             >
-              Delete
+              {actionLoading === 'deleteSingle' ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -930,20 +958,53 @@ const NotificationMenu = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete All Notifications</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete all notifications? This action cannot be undone.
+              Are you sure you want to delete all {notifications.length} notifications? This action cannot be undone.
+              {notifications.length > 10 && (
+                <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded text-sm">
+                  <strong>Warning:</strong> You are about to delete {notifications.length} notifications. 
+                  This will permanently remove all your notification history.
+                </div>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={!!actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleConfirmDeleteAll}
               className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!!actionLoading}
             >
-              Delete All
+              {actionLoading === 'deleteAll' ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting {notifications.length} notifications...
+                </>
+              ) : (
+                `Delete All ${notifications.length} Notifications`
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Debug Panel (Development Only) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 left-4 max-w-xs">
+          <details className="bg-black/80 text-white p-2 rounded text-xs">
+            <summary className="cursor-pointer">Debug: Notifications</summary>
+            <div className="mt-2 space-y-1">
+              <div>Count: {notifications.length}</div>
+              <div>Unread: {unreadCount}</div>
+              <div>Page: {pagination.currentPage}/{pagination.totalPages}</div>
+              <div>Total: {pagination.total}</div>
+              <div>Loading: {loading.toString()}</div>
+              <div>Action: {actionLoading || 'none'}</div>
+              <div>Cache: {notificationCache ? 'valid' : 'invalid'}</div>
+              <div>Cache Age: {notificationCache ? Math.round((Date.now() - notificationCache.lastFetch) / 1000) + 's' : 'N/A'}</div>
+            </div>
+          </details>
+        </div>
+      )}
     </>
   );
 };

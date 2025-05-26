@@ -1,4 +1,4 @@
-// backend/src/services/balance.service.js - Fixed with all required functions
+// backend/src/services/balance.service.js - FIXED VERSION with duplicate prevention
 const { Op } = require('sequelize');
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
@@ -14,6 +14,247 @@ const SystemSetting = db.SystemSetting;
 
 // Get currency configuration
 const currency = config.currency;
+
+/**
+ * Process payment - FIXED with duplicate prevention and proper error handling
+ * @param {number} userId - User ID
+ * @param {string} paymentId - Payment gateway reference ID
+ * @param {number} amount - Payment amount
+ * @param {string} status - Payment status
+ * @param {string} paymentMethod - Payment method
+ * @returns {Object} Payment result
+ */
+const processPayment = async (userId, paymentId, amount, status, paymentMethod = 'Paystack') => {
+  try {
+    // FIXED: Check if transaction already exists to prevent duplicates
+    const existingTransaction = await Transaction.findOne({
+      where: {
+        transactionId: `PMT-${paymentId}`
+      }
+    });
+
+    if (existingTransaction) {
+      logger.info(`Transaction already exists for payment: ${paymentId}`, {
+        userId,
+        paymentId,
+        existingTransactionId: existingTransaction.transactionId,
+        existingStatus: existingTransaction.status
+      });
+
+      // Return existing transaction details
+      return {
+        success: existingTransaction.status === 'completed',
+        transactionId: existingTransaction.transactionId,
+        paymentId,
+        amount: parseFloat(existingTransaction.amount),
+        balance: parseFloat(existingTransaction.balanceAfter),
+        currency: currency.code,
+        currencySymbol: currency.symbol,
+        message: 'Transaction already processed',
+        alreadyProcessed: true
+      };
+    }
+
+    // Get user
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+
+    // Start transaction
+    const t = await db.sequelize.transaction();
+    
+    try {
+      let transaction;
+      let newBalance = parseFloat(user.balance);
+      
+      if (status === 'success') {
+        // Update balance
+        newBalance = parseFloat(user.balance) + parseFloat(amount);
+        await user.update({ balance: newBalance }, { transaction: t });
+        
+        // Create transaction record
+        transaction = await Transaction.create({
+          userId,
+          transactionId: `PMT-${paymentId}`,
+          type: 'credit',
+          amount: parseFloat(amount),
+          balanceAfter: newBalance,
+          service: 'payment',
+          status: 'completed',
+          description: `Payment processed successfully via ${paymentMethod}. Reference: ${paymentId}`,
+        }, { transaction: t });
+        
+        logger.info('Payment processed successfully', {
+          userId,
+          paymentId,
+          amount: parseFloat(amount),
+          newBalance,
+          transactionId: transaction.transactionId
+        });
+
+        // Create notification
+        if (notificationService && notificationService.createNotification) {
+          notificationService.createNotification(
+            userId,
+            'Payment Successful',
+            `Your payment of ${currency.symbol}${amount.toFixed(2)} has been processed successfully.`,
+            'success'
+          ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
+        }
+      } else {
+        // Create failed transaction record without updating balance
+        transaction = await Transaction.create({
+          userId,
+          transactionId: `PMT-${paymentId}`,
+          type: 'credit',
+          amount: parseFloat(amount),
+          balanceAfter: user.balance,
+          service: 'payment',
+          status: 'failed',
+          description: `Payment failed via ${paymentMethod}. Reference: ${paymentId}`,
+        }, { transaction: t });
+        
+        logger.warn('Payment failed - transaction recorded', {
+          userId,
+          paymentId,
+          amount: parseFloat(amount),
+          transactionId: transaction.transactionId
+        });
+
+        // Create notification
+        if (notificationService && notificationService.createNotification) {
+          notificationService.createNotification(
+            userId,
+            'Payment Failed',
+            `Your payment of ${currency.symbol}${amount.toFixed(2)} failed to process. Please try again or contact support.`,
+            'error'
+          ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
+        }
+      }
+      
+      // Commit transaction
+      await t.commit();
+      
+      return {
+        success: status === 'success',
+        transactionId: transaction.transactionId,
+        paymentId,
+        amount: parseFloat(amount),
+        balance: newBalance,
+        currency: currency.code,
+        currencySymbol: currency.symbol,
+      };
+    } catch (error) {
+      // Rollback transaction
+      await t.rollback();
+      throw error;
+    }
+  } catch (error) {
+    logger.error(`Process payment service error: ${error.message}`, { 
+      stack: error.stack, 
+      userId, 
+      paymentId,
+      amount,
+      status
+    });
+    throw error;
+  }
+};
+
+/**
+ * Process Paystack webhook payment notification - FIXED with better error handling
+ * @param {Object} webhookData - Webhook data from Paystack
+ * @returns {Object} Processing result
+ */
+const processPaystackWebhook = async (webhookData) => {
+  try {
+    const { reference, amount, status, userId } = webhookData;
+    
+    logger.info('Processing Paystack webhook', {
+      reference,
+      amount,
+      status,
+      userId,
+      eventType: webhookData.eventType
+    });
+    
+    if (!userId) {
+      logger.warn('Paystack webhook missing userId', { reference, webhookData });
+      throw new ApiError('User ID not found in payment metadata', 400);
+    }
+    
+    // Validate amount
+    if (!amount || amount <= 0) {
+      logger.warn('Invalid amount in webhook', { reference, amount, webhookData });
+      throw new ApiError('Invalid amount in webhook data', 400);
+    }
+    
+    // Map Paystack status to our system status
+    let paymentStatus;
+    if (status === 'completed' || status === 'success') {
+      paymentStatus = 'success';
+    } else if (status === 'failed' || status === 'abandoned') {
+      paymentStatus = 'failed';
+    } else {
+      paymentStatus = 'pending';
+    }
+    
+    // Only process completed or failed payments
+    if (paymentStatus === 'pending') {
+      logger.info('Payment still pending, no action taken', {
+        reference,
+        status,
+        userId
+      });
+      return {
+        processed: false,
+        reference,
+        status: paymentStatus,
+        message: 'Payment still pending, no action taken'
+      };
+    }
+    
+    // Process the payment
+    const result = await processPayment(
+      userId,
+      reference,
+      amount, // Amount should already be in Naira from webhook processing
+      paymentStatus,
+      'Paystack'
+    );
+    
+    logger.info('Webhook processing completed', {
+      reference,
+      status: paymentStatus,
+      amount,
+      userId,
+      transactionId: result.transactionId,
+      alreadyProcessed: result.alreadyProcessed || false
+    });
+    
+    return {
+      processed: true,
+      reference,
+      status: paymentStatus,
+      transactionId: result.transactionId,
+      amount: amount,
+      currency: currency.code,
+      alreadyProcessed: result.alreadyProcessed || false
+    };
+  } catch (error) {
+    logger.error(`Process Paystack webhook error: ${error.message}`, { 
+      stack: error.stack,
+      reference: webhookData.reference,
+      userId: webhookData.userId,
+      amount: webhookData.amount
+    });
+    throw error;
+  }
+};
+
+// Keep all other existing functions unchanged...
 
 /**
  * Get user balance
@@ -550,166 +791,6 @@ const deductBalance = async (userId, amount, service, description) => {
     }
   } catch (error) {
     logger.error(`Deduct balance service error: ${error.message}`, { stack: error.stack, userId, amount, service });
-    throw error;
-  }
-};
-
-/**
- * Process payment (for handling payment gateway responses)
- * @param {number} userId - User ID
- * @param {string} paymentId - Payment gateway reference ID
- * @param {number} amount - Payment amount
- * @param {string} status - Payment status
- * @param {string} paymentMethod - Payment method
- * @returns {Object} Payment result
- */
-const processPayment = async (userId, paymentId, amount, status, paymentMethod = 'Paystack') => {
-  try {
-    // Get user
-    const user = await User.findByPk(userId);
-    
-    if (!user) {
-      throw new ApiError('User not found', 404);
-    }
-
-    // Start transaction
-    const t = await db.sequelize.transaction();
-    
-    try {
-      let transaction;
-      
-      if (status === 'success') {
-        // Update balance
-        const newBalance = parseFloat(user.balance) + parseFloat(amount);
-        await user.update({ balance: newBalance }, { transaction: t });
-        
-        // Create transaction record
-        transaction = await Transaction.create({
-          userId,
-          transactionId: `PMT-${paymentId}`,
-          type: 'credit',
-          amount: parseFloat(amount),
-          balanceAfter: newBalance,
-          service: 'payment',
-          status: 'completed',
-          description: `Payment processed successfully via ${paymentMethod}. Reference: ${paymentId}`,
-        }, { transaction: t });
-        
-        // Create notification
-        if (notificationService && notificationService.createNotification) {
-          notificationService.createNotification(
-            userId,
-            'Payment Successful',
-            `Your payment of ${currency.symbol}${amount.toFixed(2)} has been processed successfully.`,
-            'success'
-          ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
-        }
-      } else {
-        // Create failed transaction record without updating balance
-        transaction = await Transaction.create({
-          userId,
-          transactionId: `PMT-${paymentId}`,
-          type: 'credit',
-          amount: parseFloat(amount),
-          balanceAfter: user.balance,
-          service: 'payment',
-          status: 'failed',
-          description: `Payment failed via ${paymentMethod}. Reference: ${paymentId}`,
-        }, { transaction: t });
-        
-        // Create notification
-        if (notificationService && notificationService.createNotification) {
-          notificationService.createNotification(
-            userId,
-            'Payment Failed',
-            `Your payment of ${currency.symbol}${amount.toFixed(2)} failed to process. Please try again or contact support.`,
-            'error'
-          ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
-        }
-      }
-      
-      // Commit transaction
-      await t.commit();
-      
-      return {
-        success: status === 'success',
-        transactionId: transaction.transactionId,
-        paymentId,
-        amount: parseFloat(amount),
-        balance: parseFloat(user.balance) + (status === 'success' ? parseFloat(amount) : 0),
-        currency: currency.code,
-        currencySymbol: currency.symbol,
-      };
-    } catch (error) {
-      // Rollback transaction
-      await t.rollback();
-      throw error;
-    }
-  } catch (error) {
-    logger.error(`Process payment service error: ${error.message}`, { stack: error.stack, userId, paymentId });
-    throw error;
-  }
-};
-
-/**
- * Process Paystack webhook payment notification
- * @param {Object} webhookData - Webhook data from Paystack
- * @returns {Object} Processing result
- */
-const processPaystackWebhook = async (webhookData) => {
-  try {
-    const { reference, amount, status, userId } = webhookData;
-    
-    if (!userId) {
-      logger.warn('Paystack webhook missing userId in metadata', { reference });
-      throw new ApiError('User ID not found in payment metadata', 400);
-    }
-    
-    // Convert amount from kobo to Naira
-    const amountInNaira = amount / 100;
-    
-    // Map Paystack status to our system status
-    let paymentStatus;
-    if (status === 'completed' || status === 'success') {
-      paymentStatus = 'success';
-    } else if (status === 'failed' || status === 'abandoned') {
-      paymentStatus = 'failed';
-    } else {
-      paymentStatus = 'pending';
-    }
-    
-    // Only process completed or failed payments
-    if (paymentStatus === 'pending') {
-      return {
-        processed: false,
-        reference,
-        status: paymentStatus,
-        message: 'Payment still pending, no action taken'
-      };
-    }
-    
-    // Process the payment
-    const result = await processPayment(
-      userId,
-      reference,
-      amountInNaira,
-      paymentStatus,
-      'Paystack'
-    );
-    
-    return {
-      processed: true,
-      reference,
-      status: paymentStatus,
-      transactionId: result.transactionId,
-      amount: amountInNaira,
-      currency: currency.code
-    };
-  } catch (error) {
-    logger.error(`Process Paystack webhook error: ${error.message}`, { 
-      stack: error.stack,
-      reference: webhookData.reference
-    });
     throw error;
   }
 };
@@ -1256,8 +1337,8 @@ module.exports = {
   getTransactions,
   addBalance,
   deductBalance,
-  processPayment,
-  processPaystackWebhook,
+  processPayment, 
+  processPaystackWebhook, 
   checkLowBalance,
   getBalanceSummary,
   

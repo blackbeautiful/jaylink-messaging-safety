@@ -1,7 +1,7 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/components/BalanceOverview.tsx - Enhanced with full backend integration
+// src/components/BalanceOverview.tsx - Complete rewrite with full integration
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,7 +51,9 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  X
+  X,
+  Eye,
+  Info
 } from "lucide-react";
 import { api } from "@/contexts/AuthContext";
 import { formatDate, formatCurrency } from "@/lib/utils";
@@ -125,6 +127,102 @@ interface TransactionCache {
 
 const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache
 const CURRENCY_SYMBOL = '₦'; // Nigerian Naira
+
+// Payment Success Handler Component (Embedded)
+const PaymentSuccessHandler = ({ onPaymentProcessed }: { onPaymentProcessed: (success: boolean, data?: any) => void }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [processing, setProcessing] = useState(false);
+  const [processed, setProcessed] = useState(false);
+
+  const handlePaymentReturn = useCallback(async (reference: string | null) => {
+    if (!reference || processing) return;
+
+    setProcessing(true);
+    setProcessed(true);
+
+    try {
+      // Verify the payment with backend
+      const response = await api.get(`/payments/verify/${reference}`);
+
+      if (response.data.success) {
+        const paymentData = response.data.data;
+        
+        toast.success(
+          `Payment successful! ₦${paymentData.amount.toFixed(2)} has been added to your account.`,
+          {
+            duration: 5000,
+            description: `Transaction reference: ${reference}`
+          }
+        );
+
+        // Callback to parent component to refresh data
+        onPaymentProcessed(true, paymentData);
+
+        // Clean up URL parameters
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.delete('payment');
+        newSearchParams.delete('reference');
+        newSearchParams.delete('trxref');
+        setSearchParams(newSearchParams, { replace: true });
+
+      } else {
+        throw new Error(response.data.message || 'Payment verification failed');
+      }
+    } catch (error: any) {
+      console.error('Payment verification error:', error);
+      
+      const errorMessage = error.response?.data?.message || error.message || 'Payment verification failed';
+      
+      toast.error(
+        'Payment verification failed',
+        {
+          duration: 7000,
+          description: errorMessage
+        }
+      );
+
+      // Still callback to parent to refresh data (in case webhook worked)
+      onPaymentProcessed(false, { error: errorMessage, reference });
+
+      // Clean up URL parameters even on error
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('payment');
+      newSearchParams.delete('reference');
+      newSearchParams.delete('trxref');
+      setSearchParams(newSearchParams, { replace: true });
+    } finally {
+      setProcessing(false);
+    }
+  }, [processing, searchParams, setSearchParams, onPaymentProcessed]);
+
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+    const reference = searchParams.get('reference');
+    const trxref = searchParams.get('trxref'); // Paystack also sends this
+
+    // Check if this is a payment redirect
+    if ((paymentStatus === 'success' || trxref) && (reference || trxref) && !processed) {
+      handlePaymentReturn(reference || trxref);
+    }
+  }, [searchParams, processed, onPaymentProcessed, handlePaymentReturn]);
+
+  // Show processing indicator
+  if (processing) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm mx-4 text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Verifying Payment</h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            Please wait while we confirm your payment...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
 
 const BalanceOverview = () => {
   // State management
@@ -358,12 +456,38 @@ const BalanceOverview = () => {
     }
   }, [filters, transactionCache, isTransactionCacheValid, transactionsPagination.limit, calculatedStats]);
 
+  // Handle payment success callback
+  const handlePaymentProcessed = useCallback((success: boolean, data?: any) => {
+    if (success) {
+      // Invalidate caches and refresh data
+      setBalanceCache({ balance: null, lastFetch: 0 });
+      setTransactionCache(null);
+      
+      // Refresh balance and transactions
+      fetchBalance(true);
+      fetchTransactions(1, filters, false, true);
+      
+      // Close any open dialogs
+      setShowTopUpDialog(false);
+      setAmount("");
+    } else {
+      // Even on verification failure, refresh data in case webhook worked
+      fetchBalance(true);
+      fetchTransactions(1, filters, false, true);
+    }
+  }, [fetchBalance, fetchTransactions, filters]);
+
   // Handle top up
   const handleTopUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!amount || parseFloat(amount) <= 0) {
       toast.error("Please enter a valid amount");
+      return;
+    }
+
+    if (parseFloat(amount) < 100) {
+      toast.error("Minimum top-up amount is ₦100");
       return;
     }
 
@@ -524,7 +648,7 @@ const BalanceOverview = () => {
       fetchBalance(),
       fetchTransactions()
     ]);
-  }, []);
+  }, [fetchBalance, fetchTransactions]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
@@ -551,6 +675,9 @@ const BalanceOverview = () => {
 
   return (
     <div className="space-y-6">
+      {/* Payment Success Handler */}
+      <PaymentSuccessHandler onPaymentProcessed={handlePaymentProcessed} />
+      
       {/* Error display */}
       {balanceError && (
         <Card className="border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
@@ -631,6 +758,17 @@ const BalanceOverview = () => {
                             required
                           />
                           <p className="text-xs text-gray-500">Minimum amount: {formatCurrency(100, currencyConfig.symbol)}</p>
+                        </div>
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                            <div className="text-xs text-blue-800 dark:text-blue-200">
+                              <p className="font-medium mb-1">Payment Security:</p>
+                              <p>• Secure payment via Paystack</p>
+                              <p>• Your card details are encrypted</p>
+                              <p>• You'll be redirected back after payment</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                       <DialogFooter className="flex-col sm:flex-row">
@@ -1115,6 +1253,50 @@ const BalanceOverview = () => {
                 <Filter className="h-6 w-6" />
                 <span>Filter</span>
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Payment Status Information */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.7 }}
+      >
+        <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-blue-800 dark:text-blue-200 flex items-center gap-2">
+              <Info className="h-5 w-5" />
+              Payment Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Security Features:</h4>
+                <ul className="space-y-1 text-blue-700 dark:text-blue-300">
+                  <li>• SSL encrypted transactions</li>
+                  <li>• PCI DSS compliant payment processing</li>
+                  <li>• Real-time fraud detection</li>
+                  <li>• Secure payment gateway (Paystack)</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Payment Methods:</h4>
+                <ul className="space-y-1 text-blue-700 dark:text-blue-300">
+                  <li>• Visa, MasterCard, Verve cards</li>
+                  <li>• Bank transfers</li>
+                  <li>• USSD payments</li>
+                  <li>• Mobile money</li>
+                </ul>
+              </div>
+            </div>
+            <div className="mt-4 p-3 bg-blue-100 dark:bg-blue-800/50 rounded-lg">
+              <p className="text-xs text-blue-800 dark:text-blue-200">
+                <strong>Note:</strong> All payments are processed securely through Paystack. 
+                You'll be redirected to complete your payment and then brought back to this page automatically.
+              </p>
             </div>
           </CardContent>
         </Card>

@@ -48,6 +48,7 @@ const Support = () => {
     subject: "",
     message: "",
   });
+  const [activeTab, setActiveTab] = useState('contact');
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -123,13 +124,14 @@ const Support = () => {
   ];
 
   return (
-    <DashboardLayout
-      title="Help & Support"
-      backLink="/dashboard"
-      currentPath={location.pathname}
-    >
+    <DashboardLayout title="Help & Support" backLink="/dashboard" currentPath={location.pathname}>
       <div className="max-w-6xl mx-auto">
-        <Tabs defaultValue="contact" className="w-full">
+        <Tabs
+          defaultValue="contact"
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="w-full"
+        >
           <TabsList className="grid w-full md:w-[400px] grid-cols-2 mb-8">
             <TabsTrigger value="contact">Contact Us</TabsTrigger>
             <TabsTrigger value="faq">FAQs</TabsTrigger>
@@ -246,11 +248,11 @@ const Support = () => {
                       <Mail className="h-5 w-5 mt-0.5 mr-3 text-jaylink-600" />
                       <div>
                         <p className="font-medium">Email Support</p>
-                        <p className="text-sm text-gray-500">support@jaylink.com</p>
+                        <p className="text-sm text-gray-500">support@jaylinksms.com</p>
                         <p className="text-sm text-gray-500">(24/7 response within 24 hours)</p>
                       </div>
                     </div>
-                    <div className="flex items-start">
+                    {/* <div className="flex items-start">
                       <MessageSquare className="h-5 w-5 mt-0.5 mr-3 text-jaylink-600" />
                       <div>
                         <p className="font-medium">Live Chat</p>
@@ -258,14 +260,14 @@ const Support = () => {
                           Available in your dashboard during business hours
                         </p>
                       </div>
-                    </div>
+                    </div> */}
                   </CardContent>
                   <CardFooter className="flex flex-col items-start">
                     <p className="text-sm font-medium mb-2">Response Times:</p>
                     <ul className="text-sm text-gray-500 space-y-1 list-disc pl-5">
                       <li>Phone: Immediate during business hours</li>
                       <li>Email: Within 24 hours</li>
-                      <li>Live Chat: Immediate during business hours</li>
+                      {/* <li>Live Chat: Immediate during business hours</li> */}
                     </ul>
                   </CardFooter>
                 </Card>
@@ -285,9 +287,7 @@ const Support = () => {
                 <Accordion type="single" collapsible className="w-full">
                   {faqs.map((faq, index) => (
                     <AccordionItem key={index} value={`item-${index}`}>
-                      <AccordionTrigger className="text-left">
-                        {faq.question}
-                      </AccordionTrigger>
+                      <AccordionTrigger className="text-left">{faq.question}</AccordionTrigger>
                       <AccordionContent>
                         <p className="text-gray-600 dark:text-gray-400">{faq.answer}</p>
                       </AccordionContent>
@@ -297,8 +297,8 @@ const Support = () => {
               </CardContent>
               <CardFooter className="flex flex-col items-start border-t pt-6">
                 <p className="mb-4">Couldn't find what you're looking for?</p>
-                <Button 
-                  onClick={() => document.querySelector('[data-value="contact"]')?.dispatchEvent(new Event('click'))}
+                <Button
+                  onClick={() => setActiveTab('contact')}
                   className="bg-jaylink-600 hover:bg-jaylink-700"
                 >
                   <HelpCircle className="mr-2 h-4 w-4" />
@@ -316,17 +316,26 @@ const Support = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-auto py-6 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2 text-jaylink-600" />
                   <span className="font-medium">User Guide</span>
                   <span className="text-xs text-gray-500 mt-1">Complete usage instructions</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-auto py-6 flex flex-col items-center justify-center"
+                >
                   <AlertCircle className="h-8 w-8 mb-2 text-jaylink-600" />
                   <span className="font-medium">Troubleshooting</span>
                   <span className="text-xs text-gray-500 mt-1">Common issues & fixes</span>
                 </Button>
-                <Button variant="outline" className="h-auto py-6 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-auto py-6 flex flex-col items-center justify-center"
+                >
                   <CheckCircle className="h-8 w-8 mb-2 text-jaylink-600" />
                   <span className="font-medium">Best Practices</span>
                   <span className="text-xs text-gray-500 mt-1">Optimization tips</span>

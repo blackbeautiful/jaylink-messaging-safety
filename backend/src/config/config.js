@@ -91,11 +91,11 @@ const config = {
   email: {
     host: process.env.EMAIL_HOST || 'smtp.example.com',
     port: parseInt(process.env.EMAIL_PORT, 10) || 587,
-    user: process.env.EMAIL_USER || 'noreply@jaylink.com',
+    user: process.env.EMAIL_USER || 'no-reply@jaylinksms.com',
     password: process.env.EMAIL_PASSWORD || 'your_email_password',
-    from: process.env.EMAIL_FROM || 'JayLink <noreply@jaylink.com>',
-    adminEmail: process.env.ADMIN_EMAIL || 'admin@jaylink.com',
-    supportEmail: process.env.SUPPORT_EMAIL || 'support@jaylink.com',
+    from: process.env.EMAIL_FROM || 'JayLink <no-reply@jaylinksms.com>',
+    adminEmail: process.env.ADMIN_EMAIL || 'admin@jaylinksms.com',
+    supportEmail: process.env.SUPPORT_EMAIL || 'support@jaylinksms.com',
   },
 
   // Payment Gateway configuration (Paystack)

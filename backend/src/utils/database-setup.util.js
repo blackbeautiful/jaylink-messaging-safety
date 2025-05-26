@@ -888,7 +888,7 @@ class DatabaseSetupManager {
    * @private
    */
   hasMigrationFiles() {
-    const migrationsPath = path.join(__dirname, '..', '..', 'migrations');
+    const migrationsPath = path.join(__dirname, '..', 'migrations');
     return (
       fs.existsSync(migrationsPath) &&
       fs.readdirSync(migrationsPath).some((file) => file.endsWith('.js'))

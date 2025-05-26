@@ -1,6 +1,6 @@
-// backend/src/models/transaction.model.js
+// backend/src/models/transaction.model.js - SIMPLIFIED FOR MIGRATIONS
 /**
- * Transaction model
+ * Transaction model - Simplified version that works with migrations
  * @param {Object} sequelize - Sequelize instance
  * @param {Object} DataTypes - Sequelize data types
  * @returns {Object} Transaction model
@@ -23,7 +23,7 @@ module.exports = (sequelize, DataTypes) => {
     transactionId: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true, // Added unique constraint for transaction ID
+      unique: true,
     },
     type: {
       type: DataTypes.ENUM('credit', 'debit'),
@@ -50,14 +50,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
-    createdAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
   }, {
     tableName: 'transactions',
-    timestamps: true,
-    updatedAt: false,
+    timestamps: true, // This enables createdAt and updatedAt
+    
+    // Remove complex indexes - let migrations handle them
     indexes: [
       {
         name: 'idx_user_id',
@@ -66,16 +63,22 @@ module.exports = (sequelize, DataTypes) => {
       {
         name: 'idx_transaction_id',
         fields: ['transactionId'],
+        unique: true
       },
       {
         name: 'idx_created_at',
         fields: ['createdAt'],
-      },
-      {
-        name: 'idx_type',
-        fields: ['type'],
-      },
+      }
     ],
+    
+    // Basic validation only
+    validate: {
+      positiveAmount() {
+        if (this.amount <= 0) {
+          throw new Error('Transaction amount must be greater than zero');
+        }
+      }
+    }
   });
 
   // Define associations
@@ -85,8 +88,35 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'userId',
         as: 'user',
         onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       });
     }
+  };
+
+  // Add useful instance methods
+  Transaction.prototype.toSafeJSON = function() {
+    const transaction = this.toJSON();
+    
+    // Add formatted amounts
+    transaction.formattedAmount = `₦${parseFloat(transaction.amount).toFixed(2)}`;
+    transaction.formattedBalance = `₦${parseFloat(transaction.balanceAfter).toFixed(2)}`;
+    
+    return transaction;
+  };
+
+  // Add useful class methods
+  Transaction.findByUserId = async function(userId, options = {}) {
+    return this.findAll({
+      where: { userId },
+      order: [['createdAt', 'DESC']],
+      ...options
+    });
+  };
+  
+  Transaction.findByTransactionId = async function(transactionId) {
+    return this.findOne({
+      where: { transactionId }
+    });
   };
 
   return Transaction;

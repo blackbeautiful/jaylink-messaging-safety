@@ -59,7 +59,7 @@ const AppRoutes = () => {
     return isAuthenticated ? (
       <Navigate to="/dashboard" replace />
     ) : (
-      <Navigate to="/home" replace />
+      <Navigate to="/login" replace />
     );
   };
 

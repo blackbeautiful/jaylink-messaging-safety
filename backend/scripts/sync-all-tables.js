@@ -1,7 +1,7 @@
-// backend/sync-all-tables.js
+// backend/scripts/sync-all-tables.js
 require('dotenv').config();
-const db = require('./src/models');
-const logger = require('./src/config/logger');
+const db = require('../src/models');
+const logger = require('../src/config/logger');
 
 async function syncAllTables() {
   try {

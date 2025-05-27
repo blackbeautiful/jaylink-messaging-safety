@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// src/components/BalanceOverview.tsx - Complete rewrite with full integration
-import { useState, useEffect, useCallback, useMemo } from "react";
+// src/components/BalanceOverview.tsx - FIXED with proper stats and improved UX
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -53,7 +53,11 @@ import {
   Clock,
   X,
   Eye,
-  Info
+  Info,
+  Send,
+  History,
+  Users,
+  Settings
 } from "lucide-react";
 import { api } from "@/contexts/AuthContext";
 import { formatDate, formatCurrency } from "@/lib/utils";
@@ -81,6 +85,22 @@ interface Balance {
   lastUpdated: string;
 }
 
+interface BalanceSummary extends Balance {
+  totalIn: number;
+  totalOut: number;
+  netFlow: number;
+  monthlyIn: number;
+  monthlyOut: number;
+  monthlyNet: number;
+  weeklyIn: number;
+  weeklyOut: number;
+  weeklyNet: number;
+  transactionCount: number;
+  minimumBalanceThreshold: number;
+  lowBalance: boolean;
+  recentTransactions: Transaction[];
+}
+
 interface PaginationInfo {
   total: number;
   totalPages: number;
@@ -88,19 +108,6 @@ interface PaginationInfo {
   limit: number;
   hasNext: boolean;
   hasPrev: boolean;
-}
-
-interface TransactionStats {
-  totalIn: number;
-  totalOut: number;
-  thisMonth: {
-    in: number;
-    out: number;
-  };
-  thisWeek: {
-    in: number;
-    out: number;
-  };
 }
 
 interface FilterState {
@@ -113,7 +120,7 @@ interface FilterState {
 
 // Cache interfaces
 interface BalanceCache {
-  balance: Balance | null;
+  balance: BalanceSummary | null;
   lastFetch: number;
 }
 
@@ -122,48 +129,61 @@ interface TransactionCache {
   pagination: PaginationInfo;
   filters: FilterState;
   lastFetch: number;
-  stats: TransactionStats | null;
 }
 
 const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache
 const CURRENCY_SYMBOL = '₦'; // Nigerian Naira
 
-// Payment Success Handler Component (Embedded)
+// Enhanced Payment Success Handler Component with better UX
 const PaymentSuccessHandler = ({ onPaymentProcessed }: { onPaymentProcessed: (success: boolean, data?: any) => void }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [processing, setProcessing] = useState(false);
   const [processed, setProcessed] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [paymentData, setPaymentData] = useState<any>(null);
+  const processedRef = useRef(false);
 
   const handlePaymentReturn = useCallback(async (reference: string | null) => {
-    if (!reference || processing) return;
+    if (!reference || processing || processedRef.current) return;
 
+    processedRef.current = true;
     setProcessing(true);
-    setProcessed(true);
 
     try {
       // Verify the payment with backend
       const response = await api.get(`/payments/verify/${reference}`);
 
       if (response.data.success) {
-        const paymentData = response.data.data;
+        const data = response.data.data;
+        setPaymentData(data);
+        setShowSuccess(true);
         
-        toast.success(
-          `Payment successful! ₦${paymentData.amount.toFixed(2)} has been added to your account.`,
-          {
-            duration: 5000,
-            description: `Transaction reference: ${reference}`
+        // Show success animation for 3 seconds
+        setTimeout(() => {
+          // Single toast notification (prevent duplicates)
+          if (!(toast as any).isActive?.('payment-success')) {
+            toast.success(
+              `Payment successful! ₦${data.amount.toFixed(2)} has been added to your account.`,
+              {
+                id: 'payment-success',
+                duration: 4000,
+                description: `Transaction reference: ${reference}`
+              }
+            );
           }
-        );
 
-        // Callback to parent component to refresh data
-        onPaymentProcessed(true, paymentData);
+          // Callback to parent component to refresh data
+          onPaymentProcessed(true, data);
 
-        // Clean up URL parameters
-        const newSearchParams = new URLSearchParams(searchParams);
-        newSearchParams.delete('payment');
-        newSearchParams.delete('reference');
-        newSearchParams.delete('trxref');
-        setSearchParams(newSearchParams, { replace: true });
+          // Clean up URL parameters
+          const newSearchParams = new URLSearchParams(searchParams);
+          newSearchParams.delete('payment');
+          newSearchParams.delete('reference');
+          newSearchParams.delete('trxref');
+          setSearchParams(newSearchParams, { replace: true });
+
+          setShowSuccess(false);
+        }, 3000);
 
       } else {
         throw new Error(response.data.message || 'Payment verification failed');
@@ -173,13 +193,17 @@ const PaymentSuccessHandler = ({ onPaymentProcessed }: { onPaymentProcessed: (su
       
       const errorMessage = error.response?.data?.message || error.message || 'Payment verification failed';
       
-      toast.error(
-        'Payment verification failed',
-        {
-          duration: 7000,
-          description: errorMessage
-        }
-      );
+      // Single error toast
+      if (!(toast as any).isActive?.('payment-error')) {
+        toast.error(
+          'Payment verification failed',
+          {
+            id: 'payment-error',
+            duration: 6000,
+            description: errorMessage
+          }
+        );
+      }
 
       // Still callback to parent to refresh data (in case webhook worked)
       onPaymentProcessed(false, { error: errorMessage, reference });
@@ -201,23 +225,76 @@ const PaymentSuccessHandler = ({ onPaymentProcessed }: { onPaymentProcessed: (su
     const trxref = searchParams.get('trxref'); // Paystack also sends this
 
     // Check if this is a payment redirect
-    if ((paymentStatus === 'success' || trxref) && (reference || trxref) && !processed) {
+    if ((paymentStatus === 'success' || trxref) && (reference || trxref) && !processed && !processedRef.current) {
       handlePaymentReturn(reference || trxref);
     }
-  }, [searchParams, processed, onPaymentProcessed, handlePaymentReturn]);
+  }, [searchParams, processed, handlePaymentReturn]);
 
   // Show processing indicator
-  if (processing) {
+  if (processing || showSuccess) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm mx-4 text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">Verifying Payment</h3>
-          <p className="text-gray-600 dark:text-gray-400">
-            Please wait while we confirm your payment...
-          </p>
-        </div>
-      </div>
+      <AnimatePresence>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        >
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-sm mx-4 text-center"
+          >
+            {processing && !showSuccess && (
+              <>
+                <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Verifying Payment</h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Please wait while we confirm your payment...
+                </p>
+              </>
+            )}
+            
+            {showSuccess && paymentData && (
+              <>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", duration: 0.5 }}
+                  className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
+                >
+                  <CheckCircle className="h-10 w-10 text-green-600" />
+                </motion.div>
+                <motion.h3 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-xl font-semibold mb-2 text-green-600"
+                >
+                  Payment Successful!
+                </motion.h3>
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-gray-600 dark:text-gray-400 mb-2"
+                >
+                  ₦{paymentData.amount.toFixed(2)} has been added to your account
+                </motion.p>
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-sm text-gray-500 dark:text-gray-500"
+                >
+                  New balance: ₦{paymentData.balance.toFixed(2)}
+                </motion.p>
+              </>
+            )}
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
     );
   }
 
@@ -230,8 +307,8 @@ const BalanceOverview = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   
-  // Balance state
-  const [balance, setBalance] = useState<Balance | null>(null);
+  // Balance state - FIXED to use BalanceSummary with proper stats
+  const [balanceSummary, setBalanceSummary] = useState<BalanceSummary | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   
   // Transaction state
@@ -244,7 +321,6 @@ const BalanceOverview = () => {
     hasNext: false,
     hasPrev: false,
   });
-  const [transactionStats, setTransactionStats] = useState<TransactionStats | null>(null);
   
   // UI state
   const [amount, setAmount] = useState("");
@@ -287,86 +363,49 @@ const BalanceOverview = () => {
     return !isExpired && !filtersChanged;
   }, []);
 
-  // Memoized stats calculation
-  const calculatedStats = useMemo(() => {
-    if (transactions.length === 0) {
-      return {
-        totalIn: 0,
-        totalOut: 0,
-        thisMonth: { in: 0, out: 0 },
-        thisWeek: { in: 0, out: 0 }
-      };
-    }
-
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-
-    const stats = transactions.reduce((acc, transaction) => {
-      const transactionDate = new Date(transaction.createdAt);
-      const amount = transaction.amount;
-
-      if (transaction.type === 'credit') {
-        acc.totalIn += amount;
-        if (transactionDate >= startOfMonth) acc.thisMonth.in += amount;
-        if (transactionDate >= startOfWeek) acc.thisWeek.in += amount;
-      } else {
-        acc.totalOut += amount;
-        if (transactionDate >= startOfMonth) acc.thisMonth.out += amount;
-        if (transactionDate >= startOfWeek) acc.thisWeek.out += amount;
-      }
-
-      return acc;
-    }, {
-      totalIn: 0,
-      totalOut: 0,
-      thisMonth: { in: 0, out: 0 },
-      thisWeek: { in: 0, out: 0 }
-    });
-
-    return stats;
-  }, [transactions]);
-
-  // Fetch balance with caching
-  const fetchBalance = useCallback(async (forceRefresh = false) => {
+  // FIXED: Fetch balance summary with proper stats from backend
+  const fetchBalanceSummary = useCallback(async (forceRefresh = false) => {
     try {
       // Check cache first unless force refresh
       if (!forceRefresh && isCacheValid(balanceCache.lastFetch) && balanceCache.balance) {
-        setBalance(balanceCache.balance);
+        setBalanceSummary(balanceCache.balance);
         return;
       }
 
       if (!refreshing) setLoading(true);
       setBalanceError(null);
 
-      const response = await api.get('/balance');
+      const response = await api.get('/balance/summary');
       
       if (response.data.success) {
-        const balanceData = response.data.data;
-        setBalance(balanceData);
+        const summary = response.data.data;
+        setBalanceSummary(summary);
         
         // Update cache
         setBalanceCache({
-          balance: balanceData,
+          balance: summary,
           lastFetch: Date.now()
         });
         
         // Update currency config
-        if (balanceData.currency) {
+        if (summary.currency) {
           setCurrencyConfig({
-            symbol: balanceData.currencySymbol || CURRENCY_SYMBOL,
-            code: balanceData.currency
+            symbol: summary.currencySymbol || CURRENCY_SYMBOL,
+            code: summary.currency
           });
         }
       } else {
-        throw new Error(response.data.message || 'Failed to fetch balance');
+        throw new Error(response.data.message || 'Failed to fetch balance summary');
       }
     } catch (error: any) {
-      console.error('Error fetching balance:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch balance';
+      console.error('Error fetching balance summary:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch balance summary';
       setBalanceError(errorMessage);
-      toast.error(errorMessage);
+      
+      // Single error toast
+      if (!(toast as any).isActive?.('balance-error')) {
+        toast.error(errorMessage, { id: 'balance-error' });
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -385,9 +424,6 @@ const BalanceOverview = () => {
       if (!forceRefresh && page === 1 && isTransactionCacheValid(transactionCache, currentFilters)) {
         setTransactions(transactionCache!.data);
         setTransactionsPagination(transactionCache!.pagination);
-        if (transactionCache!.stats) {
-          setTransactionStats(transactionCache!.stats);
-        }
         return;
       }
 
@@ -439,8 +475,7 @@ const BalanceOverview = () => {
             data: fetchedTransactions,
             pagination,
             filters: currentFilters,
-            lastFetch: Date.now(),
-            stats: calculatedStats
+            lastFetch: Date.now()
           });
         }
       } else {
@@ -450,11 +485,14 @@ const BalanceOverview = () => {
       console.error('Error fetching transactions:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch transactions';
       setBalanceError(errorMessage);
-      toast.error(errorMessage);
+      
+      if (!(toast as any).isActive?.('transaction-error')) {
+        toast.error(errorMessage, { id: 'transaction-error' });
+      }
     } finally {
       if (showLoader) setLoading(false);
     }
-  }, [filters, transactionCache, isTransactionCacheValid, transactionsPagination.limit, calculatedStats]);
+  }, [filters, transactionCache, isTransactionCacheValid, transactionsPagination.limit]);
 
   // Handle payment success callback
   const handlePaymentProcessed = useCallback((success: boolean, data?: any) => {
@@ -464,7 +502,7 @@ const BalanceOverview = () => {
       setTransactionCache(null);
       
       // Refresh balance and transactions
-      fetchBalance(true);
+      fetchBalanceSummary(true);
       fetchTransactions(1, filters, false, true);
       
       // Close any open dialogs
@@ -472,22 +510,24 @@ const BalanceOverview = () => {
       setAmount("");
     } else {
       // Even on verification failure, refresh data in case webhook worked
-      fetchBalance(true);
+      fetchBalanceSummary(true);
       fetchTransactions(1, filters, false, true);
     }
-  }, [fetchBalance, fetchTransactions, filters]);
+  }, [fetchBalanceSummary, fetchTransactions, filters]);
 
   // Handle top up
   const handleTopUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const minTopUpAmount = parseFloat(import.meta.env.VITE_MIN_MIN_TOPUP_AMOUNT || '100');
     
     if (!amount || parseFloat(amount) <= 0) {
       toast.error("Please enter a valid amount");
       return;
     }
 
-    if (parseFloat(amount) < 100) {
-      toast.error("Minimum top-up amount is ₦100");
+    if (parseFloat(amount) < minTopUpAmount) {
+      toast.error(`Minimum top-up amount is ₦${minTopUpAmount}`);
       return;
     }
 
@@ -510,7 +550,10 @@ const BalanceOverview = () => {
     } catch (error: any) {
       console.error('Top up error:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to initialize payment';
-      toast.error(errorMessage);
+      
+      if (!(toast as any).isActive?.('topup-error')) {
+        toast.error(errorMessage, { id: 'topup-error' });
+      }
     } finally {
       setActionLoading(null);
     }
@@ -554,7 +597,7 @@ const BalanceOverview = () => {
     setBalanceCache({ balance: null, lastFetch: 0 });
     setTransactionCache(null);
     Promise.all([
-      fetchBalance(true),
+      fetchBalanceSummary(true),
       fetchTransactions(1, filters, false, true)
     ]).finally(() => setRefreshing(false));
   };
@@ -645,24 +688,24 @@ const BalanceOverview = () => {
   // Initial data fetch
   useEffect(() => {
     Promise.all([
-      fetchBalance(),
+      fetchBalanceSummary(),
       fetchTransactions()
     ]);
-  }, [fetchBalance, fetchTransactions]);
+  }, [fetchBalanceSummary, fetchTransactions]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchBalance(false);
+      fetchBalanceSummary(false);
       if (activeTab === "all") {
         fetchTransactions(1, filters, false, false);
       }
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [activeTab, filters, fetchBalance, fetchTransactions]);
+  }, [activeTab, filters, fetchBalanceSummary, fetchTransactions]);
 
-  if (loading && !balance && transactions.length === 0) {
+  if (loading && !balanceSummary && transactions.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -700,7 +743,7 @@ const BalanceOverview = () => {
         </Card>
       )}
 
-      {/* Balance Cards */}
+      {/* FIXED: Balance Cards with proper all-time statistics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -721,13 +764,13 @@ const BalanceOverview = () => {
                 </Button>
               </div>
               <CardTitle className="text-2xl sm:text-4xl font-bold text-jaylink-700">
-                {balance ? formatCurrency(balance.balance, currencyConfig.symbol) : '--'}
+                {balanceSummary ? formatCurrency(balanceSummary.balance, currencyConfig.symbol) : '--'}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex justify-between items-center">
                 <p className="text-xs sm:text-sm text-gray-500">
-                  {balance ? formatDate(balance.lastUpdated) : 'Loading...'}
+                  {balanceSummary ? formatDate(balanceSummary.lastUpdated) : 'Loading...'}
                 </p>
                 <Dialog open={showTopUpDialog} onOpenChange={setShowTopUpDialog}>
                   <DialogTrigger asChild>
@@ -751,13 +794,15 @@ const BalanceOverview = () => {
                             id="amount"
                             placeholder="Enter amount"
                             type="number"
-                            min="100"
+                            min={import.meta.env.VITE_MIN_MIN_TOPUP_AMOUNT || "100"}
                             step="0.01"
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
                             required
                           />
-                          <p className="text-xs text-gray-500">Minimum amount: {formatCurrency(100, currencyConfig.symbol)}</p>
+                          <p className="text-xs text-gray-500">
+                            Minimum amount: {formatCurrency(parseFloat(import.meta.env.VITE_MIN_MIN_TOPUP_AMOUNT || '100'), currencyConfig.symbol)}
+                          </p>
                         </div>
                         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                           <div className="flex items-start gap-2">
@@ -810,9 +855,9 @@ const BalanceOverview = () => {
         >
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Money In</CardDescription>
+              <CardDescription>Money In (All Time)</CardDescription>
               <CardTitle className="text-xl sm:text-2xl font-bold text-green-600">
-                {formatCurrency(calculatedStats.totalIn, currencyConfig.symbol)}
+                {balanceSummary ? formatCurrency(balanceSummary.totalIn, currencyConfig.symbol) : '--'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -821,7 +866,7 @@ const BalanceOverview = () => {
                 <p className="text-xs sm:text-sm text-gray-500">Total credits</p>
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                This month: {formatCurrency(calculatedStats.thisMonth.in, currencyConfig.symbol)}
+                This month: {balanceSummary ? formatCurrency(balanceSummary.monthlyIn, currencyConfig.symbol) : '--'}
               </div>
             </CardContent>
           </Card>
@@ -834,9 +879,9 @@ const BalanceOverview = () => {
         >
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Money Out</CardDescription>
+              <CardDescription>Money Out (All Time)</CardDescription>
               <CardTitle className="text-xl sm:text-2xl font-bold text-red-600">
-                {formatCurrency(calculatedStats.totalOut, currencyConfig.symbol)}
+                {balanceSummary ? formatCurrency(balanceSummary.totalOut, currencyConfig.symbol) : '--'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -845,7 +890,7 @@ const BalanceOverview = () => {
                 <p className="text-xs sm:text-sm text-gray-500">Total spending</p>
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                This month: {formatCurrency(calculatedStats.thisMonth.out, currencyConfig.symbol)}
+                This month: {balanceSummary ? formatCurrency(balanceSummary.monthlyOut, currencyConfig.symbol) : '--'}
               </div>
             </CardContent>
           </Card>
@@ -858,11 +903,11 @@ const BalanceOverview = () => {
         >
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Net Flow</CardDescription>
+              <CardDescription>Net Flow (All Time)</CardDescription>
               <CardTitle className={`text-xl sm:text-2xl font-bold ${
-                (calculatedStats.totalIn - calculatedStats.totalOut) >= 0 ? 'text-green-600' : 'text-red-600'
+                balanceSummary && balanceSummary.netFlow >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
-                {formatCurrency(calculatedStats.totalIn - calculatedStats.totalOut, currencyConfig.symbol)}
+                {balanceSummary ? formatCurrency(balanceSummary.netFlow, currencyConfig.symbol) : '--'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -871,7 +916,7 @@ const BalanceOverview = () => {
                 <p className="text-xs sm:text-sm text-gray-500">Net difference</p>
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                This month: {formatCurrency(calculatedStats.thisMonth.in - calculatedStats.thisMonth.out, currencyConfig.symbol)}
+                This month: {balanceSummary ? formatCurrency(balanceSummary.monthlyNet, currencyConfig.symbol) : '--'}
               </div>
             </CardContent>
           </Card>
@@ -1138,8 +1183,8 @@ const BalanceOverview = () => {
         </Card>
       </motion.div>
 
-      {/* Transaction Summary Cards */}
-      {transactions.length > 0 && (
+      {/* Enhanced Transaction Summary Cards */}
+      {balanceSummary && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1151,16 +1196,16 @@ const BalanceOverview = () => {
                 <CardDescription>This Week</CardDescription>
                 <div className="flex items-baseline gap-2">
                   <CardTitle className="text-lg font-bold text-green-600">
-                    +{formatCurrency(calculatedStats.thisWeek.in, currencyConfig.symbol)}
+                    +{formatCurrency(balanceSummary.weeklyIn, currencyConfig.symbol)}
                   </CardTitle>
                   <span className="text-sm text-red-600">
-                    -{formatCurrency(calculatedStats.thisWeek.out, currencyConfig.symbol)}
+                    -{formatCurrency(balanceSummary.weeklyOut, currencyConfig.symbol)}
                   </span>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="text-xs text-gray-500">
-                  Net: {formatCurrency(calculatedStats.thisWeek.in - calculatedStats.thisWeek.out, currencyConfig.symbol)}
+                  Net: {formatCurrency(balanceSummary.weeklyNet, currencyConfig.symbol)}
                 </div>
               </CardContent>
             </Card>
@@ -1170,16 +1215,16 @@ const BalanceOverview = () => {
                 <CardDescription>This Month</CardDescription>
                 <div className="flex items-baseline gap-2">
                   <CardTitle className="text-lg font-bold text-green-600">
-                    +{formatCurrency(calculatedStats.thisMonth.in, currencyConfig.symbol)}
+                    +{formatCurrency(balanceSummary.monthlyIn, currencyConfig.symbol)}
                   </CardTitle>
                   <span className="text-sm text-red-600">
-                    -{formatCurrency(calculatedStats.thisMonth.out, currencyConfig.symbol)}
+                    -{formatCurrency(balanceSummary.monthlyOut, currencyConfig.symbol)}
                   </span>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="text-xs text-gray-500">
-                  Net: {formatCurrency(calculatedStats.thisMonth.in - calculatedStats.thisMonth.out, currencyConfig.symbol)}
+                  Net: {formatCurrency(balanceSummary.monthlyNet, currencyConfig.symbol)}
                 </div>
               </CardContent>
             </Card>
@@ -1188,12 +1233,12 @@ const BalanceOverview = () => {
               <CardHeader className="pb-2">
                 <CardDescription>Total Transactions</CardDescription>
                 <CardTitle className="text-lg font-bold text-gray-900 dark:text-white">
-                  {transactionsPagination.total}
+                  {balanceSummary.transactionCount.toLocaleString()}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-xs text-gray-500">
-                  Completed: {transactions.filter(t => t.status === 'completed').length}
+                  All-time activity
                 </div>
               </CardContent>
             </Card>
@@ -1201,7 +1246,7 @@ const BalanceOverview = () => {
         </motion.div>
       )}
 
-      {/* Quick Actions */}
+      {/* Enhanced Quick Actions */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1258,11 +1303,90 @@ const BalanceOverview = () => {
         </Card>
       </motion.div>
 
-      {/* Payment Status Information */}
+      {/* Recent Activity Section */}
+      {balanceSummary && balanceSummary.recentTransactions && balanceSummary.recentTransactions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.7 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Recent Activity
+              </CardTitle>
+              <CardDescription>
+                Your latest 5 transactions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {balanceSummary.recentTransactions.map((transaction) => (
+                  <div key={transaction.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {getTransactionIcon(transaction.type, transaction.service)}
+                      <div>
+                        <p className="font-medium text-sm">
+                          {formatTransactionDescription(transaction)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatDate(transaction.createdAt, { format: 'short' })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-medium ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                        {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount), currencyConfig.symbol)}
+                      </p>
+                      <Badge className={getStatusBadge(transaction.status)} variant="secondary">
+                        {transaction.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Balance Alert */}
+      {balanceSummary && balanceSummary.lowBalance && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.8 }}
+        >
+          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-amber-800 dark:text-amber-200 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                Low Balance Alert
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-amber-700 dark:text-amber-300 mb-4">
+                Your account balance is below the recommended minimum of {formatCurrency(balanceSummary.minimumBalanceThreshold, currencyConfig.symbol)}. 
+                Consider topping up to ensure uninterrupted service.
+              </p>
+              <Button
+                onClick={() => setShowTopUpDialog(true)}
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Top Up Now
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Payment Information */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.7 }}
+        transition={{ duration: 0.5, delay: 0.9 }}
       >
         <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <CardHeader className="pb-3">
@@ -1296,6 +1420,7 @@ const BalanceOverview = () => {
               <p className="text-xs text-blue-800 dark:text-blue-200">
                 <strong>Note:</strong> All payments are processed securely through Paystack. 
                 You'll be redirected to complete your payment and then brought back to this page automatically.
+                Minimum top-up amount is {formatCurrency(parseFloat(import.meta.env.VITE_MIN_MIN_TOPUP_AMOUNT || '100'), currencyConfig.symbol)}.
               </p>
             </div>
           </CardContent>
@@ -1308,7 +1433,10 @@ const BalanceOverview = () => {
           <details className="bg-black/80 text-white p-2 rounded text-xs">
             <summary className="cursor-pointer">Debug: Balance & Transactions</summary>
             <div className="mt-2 space-y-1">
-              <div>Balance: {balance ? formatCurrency(balance.balance, currencyConfig.symbol) : 'Loading'}</div>
+              <div>Balance: {balanceSummary ? formatCurrency(balanceSummary.balance, currencyConfig.symbol) : 'Loading'}</div>
+              <div>Total In: {balanceSummary ? formatCurrency(balanceSummary.totalIn, currencyConfig.symbol) : 'Loading'}</div>
+              <div>Total Out: {balanceSummary ? formatCurrency(balanceSummary.totalOut, currencyConfig.symbol) : 'Loading'}</div>
+              <div>Net Flow: {balanceSummary ? formatCurrency(balanceSummary.netFlow, currencyConfig.symbol) : 'Loading'}</div>
               <div>Transactions: {transactions.length}</div>
               <div>Page: {transactionsPagination.currentPage}/{transactionsPagination.totalPages}</div>
               <div>Total: {transactionsPagination.total}</div>
@@ -1320,6 +1448,8 @@ const BalanceOverview = () => {
               <div>Balance Cache: {balanceCache.balance ? 'valid' : 'invalid'}</div>
               <div>Transaction Cache: {transactionCache ? 'valid' : 'invalid'}</div>
               <div>Cache Age: {balanceCache.balance ? Math.round((Date.now() - balanceCache.lastFetch) / 1000) + 's' : 'N/A'}</div>
+              <div>Low Balance: {balanceSummary?.lowBalance ? 'Yes' : 'No'}</div>
+              <div>Min Threshold: {balanceSummary ? formatCurrency(balanceSummary.minimumBalanceThreshold, currencyConfig.symbol) : 'N/A'}</div>
             </div>
           </details>
         </div>

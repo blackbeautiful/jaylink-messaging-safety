@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Successful - JayLink SMS</title>
+  <style>
+    /* Reset styles */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #333;
+      background-color: #f9f9f9;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #ffffff;
+    }
+    .header {
+      text-align: center;
+      padding: 20px 0;
+      border-bottom: 1px solid #eaeaea;
+    }
+    .logo {
+      color: #0284c7;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .content {
+      padding: 30px 20px;
+      line-height: 1.6;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      color: #888;
+      border-top: 1px solid #eaeaea;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background-color: #0284c7;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+    .success-alert {
+      padding: 15px;
+      background-color: #e8f5e8;
+      border-left: 4px solid #4caf50;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .success-alert strong {
+      color: #2e7d32;
+    }
+    .amount-display {
+      padding: 20px;
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 4px;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .amount {
+      font-size: 32px;
+      font-weight: bold;
+      color: #4caf50;
+      margin: 0;
+    }
+    .amount-label {
+      color: #666;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .details-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      background-color: #fafafa;
+    }
+    .details-table td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #eaeaea;
+    }
+    .details-table td:first-child {
+      font-weight: 600;
+      color: #555;
+      width: 40%;
+    }
+    .details-table td:last-child {
+      color: #333;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    .details-table tr:last-child td {
+      border-bottom: none;
+    }
+    .transaction-id {
+      font-family: monospace;
+      background-color: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+    .highlight {
+      color: #4caf50;
+      font-weight: bold;
+    }
+    .social {
+      margin-top: 20px;
+    }
+    .social a {
+      margin: 0 10px;
+      text-decoration: none;
+      color: #0284c7;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">Jay<span style="color: #0369a1;">Link</span> SMS</div>
+    </div>
+    <div class="content">
+      <h2>Payment Successful!</h2>
+      <p>Hello {{firstName}},</p>
+      
+      <div class="success-alert">
+        <strong>✅ Payment Processed Successfully!</strong><br>
+        Your account has been credited instantly and is ready for use.
+      </div>
+      
+      <div class="amount-display">
+        <div class="amount">{{formatCurrency amount currencySymbol}}</div>
+        <div class="amount-label">Successfully Added to Your Account</div>
+      </div>
+      
+      <p>Here are your transaction details:</p>
+      
+      <table class="details-table">
+        <tr>
+          <td>Amount Paid:</td>
+          <td class="highlight">{{formatCurrency amount currencySymbol}}</td>
+        </tr>
+        <tr>
+          <td>Payment Method:</td>
+          <td>{{paymentMethod}}</td>
+        </tr>
+        <tr>
+          <td>Reference Number:</td>
+          <td><span class="transaction-id">{{reference}}</span></td>
+        </tr>
+        {{#if transactionId}}
+        <tr>
+          <td>Transaction ID:</td>
+          <td><span class="transaction-id">{{transactionId}}</span></td>
+        </tr>
+        {{/if}}
+        <tr>
+          <td>New Account Balance:</td>
+          <td class="highlight">{{formatCurrency newBalance currencySymbol}}</td>
+        </tr>
+        <tr>
+          <td>Transaction Date:</td>
+          <td>{{formatDate timestamp}}</td>
+        </tr>
+      </table>
+      
+      <p>Your account is now ready for use! You can start sending SMS messages, making voice calls, and using all our premium features.</p>
+      
+      <div style="text-align: center;">
+        <a href="{{balanceUrl}}" class="button">View Account Balance</a>
+      </div>
+      
+      <p><strong>Important:</strong> Keep your transaction reference number safe. You can use it to track this payment or for support inquiries.</p>
+      
+      <p>Thank you for choosing JayLink SMS. We're here to help you communicate effectively!</p>
+      
+      <p>Best regards,<br>The JayLink Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; {{currentYear}} JayLink SMS. All rights reserved.</p>
+      <div class="social">
+        <a href="#">Twitter</a> | <a href="#">Facebook</a> | <a href="#">LinkedIn</a>
+      </div>
+      <p>This is an automated email confirmation. Please do not reply to this message.<br>
+      If you have questions, contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+    </div>
+  </div>
+</body>
+</html>

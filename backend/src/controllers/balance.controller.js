@@ -1,4 +1,4 @@
-// backend/src/controllers/balance.controller.js - Complete controller with all methods
+// backend/src/controllers/balance.controller.js - FIXED VERSION with proper stats
 const balanceService = require('../services/balance.service');
 const response = require('../utils/response.util');
 const logger = require('../config/logger');
@@ -17,6 +17,24 @@ const getBalance = async (req, res, next) => {
     return response.success(res, balance, 'Balance retrieved successfully');
   } catch (error) {
     logger.error(`Get balance controller error: ${error.message}`, { stack: error.stack });
+    next(error);
+  }
+};
+
+/**
+ * FIXED: Get balance summary with comprehensive all-time statistics
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const getBalanceSummary = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const summary = await balanceService.getBalanceSummary(userId);
+    
+    return response.success(res, summary, 'Balance summary retrieved successfully');
+  } catch (error) {
+    logger.error(`Get balance summary controller error: ${error.message}`, { stack: error.stack });
     next(error);
   }
 };
@@ -90,7 +108,7 @@ const getTransactionById = async (req, res, next) => {
 };
 
 /**
- * Get transaction statistics
+ * FIXED: Get transaction statistics with proper validation
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
@@ -98,7 +116,13 @@ const getTransactionById = async (req, res, next) => {
 const getTransactionStats = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { period = '30d', groupBy = 'day', includeServices = false } = req.query;
+    const { period = '30d' } = req.query;
+    
+    // Validate period parameter
+    const validPeriods = ['1d', '7d', '30d', '90d', '1y'];
+    if (!validPeriods.includes(period)) {
+      return response.error(res, `Period must be one of: ${validPeriods.join(', ')}`, 400);
+    }
     
     const stats = await balanceService.getTransactionStats(userId, period);
     
@@ -169,13 +193,16 @@ const topUp = async (req, res, next) => {
     const userId = req.user.id;
     const { amount, paymentMethod = 'paystack' } = req.body;
     
+    // Get minimum top-up amount from environment
+    const minTopUpAmount = parseFloat(process.env.MIN_TOPUP_AMOUNT) || 100;
+    
     // Validate amount
     if (!amount || parseFloat(amount) <= 0) {
       return response.error(res, 'Valid amount is required', 400);
     }
     
-    if (parseFloat(amount) < 100) {
-      return response.error(res, 'Minimum top-up amount is ₦100', 400);
+    if (parseFloat(amount) < minTopUpAmount) {
+      return response.error(res, `Minimum top-up amount is ₦${minTopUpAmount}`, 400);
     }
     
     const result = await balanceService.addBalance(userId, parseFloat(amount), paymentMethod);
@@ -183,38 +210,6 @@ const topUp = async (req, res, next) => {
     return response.success(res, result, 'Balance topped up successfully');
   } catch (error) {
     logger.error(`Top up controller error: ${error.message}`, { stack: error.stack });
-    next(error);
-  }
-};
-
-/**
- * Get balance summary with analytics
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- */
-const getBalanceSummary = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const { includeTrend = false, includeRecentTransactions = true, period = '30d' } = req.query;
-    
-    const summary = await balanceService.getBalanceSummary(userId);
-    
-    // Add trend data if requested
-    if (includeTrend === 'true') {
-      const trendData = await balanceService.getBalanceTrend(userId, period, 'day');
-      summary.trend = trendData;
-    }
-    
-    // Add recent transactions if requested
-    if (includeRecentTransactions === 'true') {
-      const recentTransactions = await balanceService.getRecentTransactions(userId, 5);
-      summary.recentTransactions = recentTransactions;
-    }
-    
-    return response.success(res, summary, 'Balance summary retrieved successfully');
-  } catch (error) {
-    logger.error(`Get balance summary controller error: ${error.message}`, { stack: error.stack });
     next(error);
   }
 };
@@ -398,10 +393,10 @@ const getBalanceAlerts = async (req, res, next) => {
 module.exports = {
   // Core balance operations
   getBalance,
+  getBalanceSummary, // FIXED: Added balance summary endpoint
   getTransactions,
   exportTransactions,
   topUp,
-  getBalanceSummary,
   
   // Transaction management
   getTransactionById,

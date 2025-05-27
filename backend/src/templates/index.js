@@ -1,4 +1,4 @@
-// Templates initialization
+// backend/src/templates/index.js - FIXED VERSION
 const fs = require('fs');
 const path = require('path');
 let handlebars;
@@ -23,15 +23,51 @@ try {
     }
   });
   
-  handlebars.registerHelper('formatCurrency', (amount, currency = 'USD') => {
+  // FIXED: Handle both currency codes and symbols properly
+  handlebars.registerHelper('formatCurrency', (amount, currencyOrSymbol = 'USD') => {
     if (typeof amount !== 'number') {
       amount = parseFloat(amount) || 0;
     }
     
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency
-    }).format(amount);
+    // Map currency symbols to codes
+    const currencyMap = {
+      '₦': 'NGN',
+      '$': 'USD',
+      '€': 'EUR',
+      '£': 'GBP',
+      '¥': 'JPY'
+    };
+    
+    // Check if it's a symbol that needs to be converted to code
+    let currencyCode = currencyOrSymbol;
+    if (currencyMap[currencyOrSymbol]) {
+      currencyCode = currencyMap[currencyOrSymbol];
+    }
+    
+    // Validate currency code (must be 3 letters)
+    if (!/^[A-Z]{3}$/.test(currencyCode)) {
+      // If not a valid currency code, use simple formatting with symbol
+      const symbol = currencyOrSymbol || '₦';
+      return `${symbol}${amount.toLocaleString('en-US', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      })}`;
+    }
+    
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode
+      }).format(amount);
+    } catch (error) {
+      // Fallback to simple formatting if Intl.NumberFormat fails
+      console.warn(`Failed to format currency with code ${currencyCode}, using fallback`);
+      const symbol = currencyOrSymbol || '₦';
+      return `${symbol}${amount.toLocaleString('en-US', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      })}`;
+    }
   });
   
   handlebars.registerHelper('if_eq', function(a, b, opts) {

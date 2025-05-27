@@ -1,4 +1,4 @@
-// backend/src/services/balance.service.js - FIXED VERSION with duplicate prevention
+// backend/src/services/balance.service.js - FIXED VERSION with proper stats calculation
 const { Op } = require('sequelize');
 const db = require('../models');
 const ApiError = require('../utils/api-error.util');
@@ -100,8 +100,27 @@ const processPayment = async (userId, paymentId, amount, status, paymentMethod =
             userId,
             'Payment Successful',
             `Your payment of ${currency.symbol}${amount.toFixed(2)} has been processed successfully.`,
-            'success'
+            'success',
+            {
+              action: 'payment-success',
+              amount: parseFloat(amount),
+              paymentMethod,
+              reference: paymentId,
+              newBalance,
+              currency: currency.code
+            },
+            false // Don't send email by default - will be handled by getUserNotificationSettings
           ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
+        }
+
+        // FIXED: Send email notification if enabled in user settings
+        try {
+          const userSettings = await notificationService.getUserNotificationSettings(userId);
+          if (userSettings.emailAlerts !== false && userSettings.paymentNotifications !== false) {
+            await emailService.sendPaymentSuccessEmail(user, parseFloat(amount), paymentMethod, paymentId, newBalance, transaction.transactionId);
+          }
+        } catch (emailError) {
+          logger.error(`Failed to send payment success email: ${emailError.message}`, { userId, paymentId });
         }
       } else {
         // Create failed transaction record without updating balance
@@ -129,7 +148,15 @@ const processPayment = async (userId, paymentId, amount, status, paymentMethod =
             userId,
             'Payment Failed',
             `Your payment of ${currency.symbol}${amount.toFixed(2)} failed to process. Please try again or contact support.`,
-            'error'
+            'error',
+            {
+              action: 'payment-failed',
+              amount: parseFloat(amount),
+              paymentMethod,
+              reference: paymentId,
+              currency: currency.code
+            },
+            true // Send email for failed payments
           ).catch(err => logger.error(`Failed to create notification: ${err.message}`));
         }
       }
@@ -220,7 +247,7 @@ const processPaystackWebhook = async (webhookData) => {
     const result = await processPayment(
       userId,
       reference,
-      amount, // Amount should already be in Naira from webhook processing
+      amount,
       paymentStatus,
       'Paystack'
     );
@@ -253,8 +280,6 @@ const processPaystackWebhook = async (webhookData) => {
     throw error;
   }
 };
-
-// Keep all other existing functions unchanged...
 
 /**
  * Get user balance
@@ -301,6 +326,238 @@ const getBalance = async (userId) => {
     };
   } catch (error) {
     logger.error(`Get balance service error: ${error.message}`, { stack: error.stack, userId });
+    throw error;
+  }
+};
+
+/**
+ * FIXED: Get transaction statistics for a specific period from ALL transactions
+ * @param {number} userId - User ID
+ * @param {string} period - Time period (1d, 7d, 30d, 90d, 1y)
+ * @returns {Object} Transaction statistics
+ */
+const getTransactionStats = async (userId, period = '30d') => {
+  try {
+    // Calculate date range based on period
+    const now = new Date();
+    let startDate;
+    
+    switch (period) {
+      case '1d':
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90d':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      case '1y':
+        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+    
+    // FIXED: Get ALL transactions for the period (no limit)
+    const transactions = await Transaction.findAll({
+      where: {
+        userId,
+        createdAt: {
+          [Op.gte]: startDate,
+        },
+      },
+      order: [['createdAt', 'DESC']],
+    });
+    
+    // FIXED: Calculate statistics from ALL transactions
+    const stats = transactions.reduce((acc, transaction) => {
+      const amount = parseFloat(transaction.amount) || 0;
+      
+      if (transaction.type === 'credit') {
+        acc.totalIn += amount;
+        acc.creditTransactions += 1;
+      } else {
+        acc.totalOut += amount;
+        acc.debitTransactions += 1;
+      }
+      
+      // Status counts
+      if (transaction.status === 'completed') {
+        acc.completed += 1;
+      } else if (transaction.status === 'pending') {
+        acc.pending += 1;
+      } else if (transaction.status === 'failed') {
+        acc.failed += 1;
+      }
+      
+      // Service breakdown
+      const service = transaction.service || 'other';
+      acc.serviceBreakdown[service] = (acc.serviceBreakdown[service] || 0) + amount;
+      
+      return acc;
+    }, {
+      totalIn: 0,
+      totalOut: 0,
+      netFlow: 0,
+      creditTransactions: 0,
+      debitTransactions: 0,
+      completed: 0,
+      pending: 0,
+      failed: 0,
+      serviceBreakdown: {},
+      period: period,
+      startDate: startDate.toISOString(),
+      endDate: now.toISOString()
+    });
+    
+    // Calculate net flow
+    stats.netFlow = stats.totalIn - stats.totalOut;
+    
+    // Add currency information
+    stats.currency = {
+      code: currency.code,
+      symbol: currency.symbol,
+      name: currency.name
+    };
+    
+    return stats;
+  } catch (error) {
+    logger.error(`Get transaction stats error: ${error.message}`, { 
+      stack: error.stack, 
+      userId, 
+      period
+    });
+    throw error;
+  }
+};
+
+/**
+ * FIXED: Get comprehensive balance summary with ALL-TIME stats
+ * @param {number} userId - User ID
+ * @returns {Object} Balance summary with proper stats
+ */
+const getBalanceSummary = async (userId) => {
+  try {
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'balance'],
+    });
+
+    if (!user) {
+      throw new ApiError('User not found', 404);
+    }
+    
+    // Get recent transactions (last 5)
+    const recentTransactions = await Transaction.findAll({
+      where: { userId },
+      limit: 5,
+      order: [['createdAt', 'DESC']],
+    });
+    
+    // Format transactions with currency information
+    const formattedTransactions = recentTransactions.map(transaction => {
+      const transObj = transaction.toJSON();
+      transObj.currencyCode = currency.code;
+      transObj.currencySymbol = currency.symbol;
+      return transObj;
+    });
+    
+    // FIXED: Calculate ALL-TIME spending statistics (not just current month)
+    const allTimeStats = await Transaction.findAll({
+      attributes: [
+        [db.sequelize.fn('SUM', db.sequelize.literal('CASE WHEN type = "credit" THEN amount ELSE 0 END')), 'totalIn'],
+        [db.sequelize.fn('SUM', db.sequelize.literal('CASE WHEN type = "debit" THEN amount ELSE 0 END')), 'totalOut'],
+        [db.sequelize.fn('COUNT', '*'), 'totalTransactions']
+      ],
+      where: { userId },
+      raw: true
+    });
+
+    // Calculate current month stats
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    const monthlyStats = await Transaction.findAll({
+      attributes: [
+        [db.sequelize.fn('SUM', db.sequelize.literal('CASE WHEN type = "credit" THEN amount ELSE 0 END')), 'monthlyIn'],
+        [db.sequelize.fn('SUM', db.sequelize.literal('CASE WHEN type = "debit" THEN amount ELSE 0 END')), 'monthlyOut']
+      ],
+      where: {
+        userId,
+        createdAt: {
+          [Op.gte]: startOfMonth,
+        },
+      },
+      raw: true
+    });
+
+    // Calculate this week stats
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const weeklyStats = await Transaction.findAll({
+      attributes: [
+        [db.sequelize.fn('SUM', db.sequelize.literal('CASE WHEN type = "credit" THEN amount ELSE 0 END')), 'weeklyIn'],
+        [db.sequelize.fn('SUM', db.sequelize.literal('CASE WHEN type = "debit" THEN amount ELSE 0 END')), 'weeklyOut']
+      ],
+      where: {
+        userId,
+        createdAt: {
+          [Op.gte]: startOfWeek,
+        },
+      },
+      raw: true
+    });
+    
+    // Get transaction count
+    const transactionCount = allTimeStats[0].totalTransactions || 0;
+
+    // Get minimum balance threshold from system settings or config defaults
+    let minimumBalanceThreshold;
+    try {
+      const settingRow = await SystemSetting.findOne({ 
+        where: { settingKey: 'minimumBalanceThreshold' } 
+      });
+      minimumBalanceThreshold = settingRow 
+        ? parseFloat(settingRow.settingValue) 
+        : parseFloat(process.env.LOW_BALANCE_THRESHOLD) || config.systemDefaults.minimumBalanceThreshold;
+    } catch (error) {
+      minimumBalanceThreshold = parseFloat(process.env.LOW_BALANCE_THRESHOLD) || config.systemDefaults.minimumBalanceThreshold;
+    }
+
+    return {
+      balance: parseFloat(user.balance),
+      currency: currency.code,
+      currencySymbol: currency.symbol,
+      currencyName: currency.name,
+      recentTransactions: formattedTransactions,
+      
+      // FIXED: All-time statistics
+      totalIn: parseFloat(allTimeStats[0].totalIn) || 0,
+      totalOut: parseFloat(allTimeStats[0].totalOut) || 0,
+      netFlow: (parseFloat(allTimeStats[0].totalIn) || 0) - (parseFloat(allTimeStats[0].totalOut) || 0),
+      
+      // Monthly statistics
+      monthlyIn: parseFloat(monthlyStats[0].monthlyIn) || 0,
+      monthlyOut: parseFloat(monthlyStats[0].monthlyOut) || 0,
+      monthlyNet: (parseFloat(monthlyStats[0].monthlyIn) || 0) - (parseFloat(monthlyStats[0].monthlyOut) || 0),
+      
+      // Weekly statistics
+      weeklyIn: parseFloat(weeklyStats[0].weeklyIn) || 0,
+      weeklyOut: parseFloat(weeklyStats[0].weeklyOut) || 0,
+      weeklyNet: (parseFloat(weeklyStats[0].weeklyIn) || 0) - (parseFloat(weeklyStats[0].weeklyOut) || 0),
+      
+      transactionCount,
+      minimumBalanceThreshold,
+      lastUpdated: new Date(),
+      lowBalance: parseFloat(user.balance) < minimumBalanceThreshold
+    };
+  } catch (error) {
+    logger.error(`Get balance summary service error: ${error.message}`, { stack: error.stack, userId });
     throw error;
   }
 };
@@ -647,8 +904,14 @@ const exportTransactionHistory = async (userId, options = {}) => {
  */
 const addBalance = async (userId, amount, paymentMethod) => {
   try {
+    const minTopUpAmount = parseFloat(process.env.MIN_TOPUP_AMOUNT) || 100;
+    
     if (amount <= 0) {
       throw new ApiError('Amount must be greater than zero', 400);
+    }
+
+    if (amount < minTopUpAmount) {
+      throw new ApiError(`Minimum top-up amount is ${currency.symbol}${minTopUpAmount}`, 400);
     }
 
     // Get user
@@ -669,8 +932,7 @@ const addBalance = async (userId, amount, paymentMethod) => {
       // Create transaction record
       const transactionId = generateUniqueId('top');
       const transaction = await Transaction.create({
-        userId,
-        transactionId,
+        userId, transactionId,
         type: 'credit',
         amount: parseFloat(amount),
         balanceAfter: newBalance,
@@ -809,7 +1071,7 @@ const checkLowBalance = async (userId, balance) => {
       throw new Error('User not found');
     }
     
-    // Get minimum balance threshold from system settings or config defaults
+    // Get minimum balance threshold from environment or system settings or config defaults
     let threshold;
     try {
       const settingRow = await SystemSetting.findOne({ 
@@ -817,9 +1079,9 @@ const checkLowBalance = async (userId, balance) => {
       });
       threshold = settingRow 
         ? parseFloat(settingRow.settingValue) 
-        : config.systemDefaults.minimumBalanceThreshold;
+        : parseFloat(process.env.LOW_BALANCE_THRESHOLD) || config.systemDefaults.minimumBalanceThreshold;
     } catch (error) {
-      threshold = config.systemDefaults.minimumBalanceThreshold;
+      threshold = parseFloat(process.env.LOW_BALANCE_THRESHOLD) || config.systemDefaults.minimumBalanceThreshold;
     }
     
     // Check if balance is below threshold
@@ -858,188 +1120,6 @@ const checkLowBalance = async (userId, balance) => {
   } catch (error) {
     logger.error(`Check low balance error: ${error.message}`, { stack: error.stack, userId, balance });
     // Don't throw the error as this is a background operation
-  }
-};
-
-/**
- * Get balance summary with recent transactions
- * @param {number} userId - User ID
- * @returns {Object} Balance summary
- */
-const getBalanceSummary = async (userId) => {
-  try {
-    const user = await User.findByPk(userId, {
-      attributes: ['id', 'balance'],
-    });
-
-    if (!user) {
-      throw new ApiError('User not found', 404);
-    }
-    
-    // Get recent transactions (last 5)
-    const recentTransactions = await Transaction.findAll({
-      where: { userId },
-      limit: 5,
-      order: [['createdAt', 'DESC']],
-    });
-    
-    // Format transactions with currency information
-    const formattedTransactions = recentTransactions.map(transaction => {
-      const transObj = transaction.toJSON();
-      transObj.currencyCode = currency.code;
-      transObj.currencySymbol = currency.symbol;
-      return transObj;
-    });
-    
-    // Calculate spending for current month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    const monthlySpending = await Transaction.sum('amount', {
-      where: {
-        userId,
-        type: 'debit',
-        createdAt: {
-          [Op.gte]: startOfMonth,
-        },
-      },
-    }) || 0;
-    
-    // Get transaction count
-    const transactionCount = await Transaction.count({
-      where: { userId },
-    });
-
-    // Get minimum balance threshold from system settings or config defaults
-    let minimumBalanceThreshold;
-    try {
-      const settingRow = await SystemSetting.findOne({ 
-        where: { settingKey: 'minimumBalanceThreshold' } 
-      });
-      minimumBalanceThreshold = settingRow 
-        ? parseFloat(settingRow.settingValue) 
-        : config.systemDefaults.minimumBalanceThreshold;
-    } catch (error) {
-      minimumBalanceThreshold = config.systemDefaults.minimumBalanceThreshold;
-    }
-
-    return {
-      balance: parseFloat(user.balance),
-      currency: currency.code,
-      currencySymbol: currency.symbol,
-      currencyName: currency.name,
-      recentTransactions: formattedTransactions,
-      monthlySpending,
-      transactionCount,
-      minimumBalanceThreshold,
-      lastUpdated: new Date(),
-      lowBalance: parseFloat(user.balance) < minimumBalanceThreshold
-    };
-  } catch (error) {
-    logger.error(`Get balance summary service error: ${error.message}`, { stack: error.stack, userId });
-    throw error;
-  }
-};
-
-/**
- * Get transaction statistics for dashboard
- * @param {number} userId - User ID
- * @param {string} period - Time period (1d, 7d, 30d, 90d)
- * @returns {Object} Transaction statistics
- */
-const getTransactionStats = async (userId, period = '30d') => {
-  try {
-    // Calculate date range based on period
-    const now = new Date();
-    let startDate;
-    
-    switch (period) {
-      case '1d':
-        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        break;
-      case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '30d':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-    
-    // Get transactions for the period
-    const transactions = await Transaction.findAll({
-      where: {
-        userId,
-        createdAt: {
-          [Op.gte]: startDate,
-        },
-      },
-      order: [['createdAt', 'DESC']],
-    });
-    
-    // Calculate statistics
-    const stats = transactions.reduce((acc, transaction) => {
-      const amount = parseFloat(transaction.amount) || 0;
-      
-      if (transaction.type === 'credit') {
-        acc.totalIn += amount;
-        acc.creditTransactions += 1;
-      } else {
-        acc.totalOut += amount;
-        acc.debitTransactions += 1;
-      }
-      
-      // Status counts
-      if (transaction.status === 'completed') {
-        acc.completed += 1;
-      } else if (transaction.status === 'pending') {
-        acc.pending += 1;
-      } else if (transaction.status === 'failed') {
-        acc.failed += 1;
-      }
-      
-      // Service breakdown
-      const service = transaction.service || 'other';
-      acc.serviceBreakdown[service] = (acc.serviceBreakdown[service] || 0) + amount;
-      
-      return acc;
-    }, {
-      totalIn: 0,
-      totalOut: 0,
-      netFlow: 0,
-      creditTransactions: 0,
-      debitTransactions: 0,
-      completed: 0,
-      pending: 0,
-      failed: 0,
-      serviceBreakdown: {},
-      period: period,
-      startDate: startDate.toISOString(),
-      endDate: now.toISOString()
-    });
-    
-    // Calculate net flow
-    stats.netFlow = stats.totalIn - stats.totalOut;
-    
-    // Add currency information
-    stats.currency = {
-      code: currency.code,
-      symbol: currency.symbol,
-      name: currency.name
-    };
-    
-    return stats;
-  } catch (error) {
-    logger.error(`Get transaction stats error: ${error.message}`, { 
-      stack: error.stack, 
-      userId, 
-      period
-    });
-    throw error;
   }
 };
 

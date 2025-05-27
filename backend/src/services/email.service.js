@@ -1,4 +1,4 @@
-// backend/src/services/email.service.js - ENHANCED with payment success email
+// backend/src/services/email.service.js - FIXED VERSION
 const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 const path = require('path');
@@ -6,10 +6,38 @@ let handlebars;
 try {
   handlebars = require('handlebars');
   
-  // Register Handlebars helpers
+  // Register Handlebars helpers - FIXED formatCurrency helper
   handlebars.registerHelper('currentYear', () => new Date().getFullYear());
-  handlebars.registerHelper('formatCurrency', (amount, symbol) => `${symbol}${parseFloat(amount).toFixed(2)}`);
-  handlebars.registerHelper('formatDate', (date) => new Date(date).toLocaleString());
+  
+  // FIXED: Proper currency formatting that doesn't rely on Intl.NumberFormat with symbol
+  handlebars.registerHelper('formatCurrency', (amount, symbol) => {
+    try {
+      const numAmount = parseFloat(amount || 0);
+      return `${symbol || '₦'}${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } catch (error) {
+      console.error('Currency formatting error:', error);
+      return `${symbol || '₦'}${parseFloat(amount || 0).toFixed(2)}`;
+    }
+  });
+  
+  handlebars.registerHelper('formatDate', (date) => {
+    return new Date(date).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  });
+  handlebars.registerHelper('formatShortDate', (date) => {
+    return new Date(date).toLocaleDateString('en-US');
+  });
+  handlebars.registerHelper('eq', (a, b) => a === b);
+  handlebars.registerHelper('gt', (a, b) => a > b);
+  handlebars.registerHelper('add', (a, b) => a + b);
+  handlebars.registerHelper('percentage', (value, total) => {
+    return total > 0 ? Math.round((value / total) * 100) : 0;
+  });
 } catch (error) {
   console.error('Failed to load handlebars:', error.message);
 }
@@ -19,7 +47,7 @@ const logger = require('../config/logger');
 
 // Create a transporter using the configured email settings
 const createTransporter = () => {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: config.email.host,
     port: config.email.port,
     secure: config.email.port === 465, // true for 465, false for other ports
@@ -50,144 +78,27 @@ const loadTemplate = async (templateName) => {
       const templateSource = await fs.readFile(filePath, 'utf-8');
       return handlebars.compile(templateSource);
     } catch (fileError) {
-      // If file doesn't exist, use a fallback template
+      // If file doesn't exist, use a simple fallback template
       logger.warn(`Email template '${templateName}' not found, using fallback template`);
       
-      // Create a fallback template based on template type
-      let fallbackTemplate;
-      
-      switch (templateName) {
-        case 'payment-success':
-          fallbackTemplate = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="UTF-8">
-              <title>Payment Successful - JayLink SMS</title>
-              <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-                .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-                .amount { font-size: 24px; font-weight: bold; color: #10b981; text-align: center; margin: 20px 0; }
-                .details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
-                .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
-                .button { display: inline-block; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>🎉 Payment Successful!</h1>
-                </div>
-                <div class="content">
-                  <p>Hello {{firstName}},</p>
-                  <p>Great news! Your payment has been processed successfully and your account has been credited.</p>
-                  
-                  <div class="amount">{{formatCurrency amount currencySymbol}}</div>
-                  
-                  <div class="details">
-                    <h3>Payment Details:</h3>
-                    <p><strong>Amount:</strong> {{formatCurrency amount currencySymbol}}</p>
-                    <p><strong>Payment Method:</strong> {{paymentMethod}}</p>
-                    <p><strong>Reference:</strong> {{reference}}</p>
-                    <p><strong>New Balance:</strong> {{formatCurrency newBalance currencySymbol}}</p>
-                    <p><strong>Date:</strong> {{formatDate timestamp}}</p>
-                  </div>
-                  
-                  <p>You can now continue using JayLink SMS services. Your account balance has been updated and is ready for use.</p>
-                  
-                  <div style="text-align: center;">
-                    <a href="{{appUrl}}/balance" class="button">View Balance</a>
-                  </div>
-                  
-                  <p>Thank you for choosing JayLink SMS!</p>
-                </div>
-                <div class="footer">
-                  <p>This is an automated email. Please do not reply to this message.</p>
-                  <p>&copy; {{currentYear}} JayLink SMS. All rights reserved.</p>
-                </div>
-              </div>
-            </body>
-            </html>
-          `;
-          break;
-          
-        case 'low-balance':
-          fallbackTemplate = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="UTF-8">
-              <title>Low Balance Alert - JayLink SMS</title>
-              <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: #f59e0b; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-                .content { background: #fef3c7; padding: 30px; border-radius: 0 0 8px 8px; }
-                .balance { font-size: 24px; font-weight: bold; color: #f59e0b; text-align: center; margin: 20px 0; }
-                .button { display: inline-block; background: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-                .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>⚠️ Low Balance Alert</h1>
-                </div>
-                <div class="content">
-                  <p>Hello {{firstName}},</p>
-                  <p>This is a friendly reminder that your JayLink SMS account balance is running low.</p>
-                  
-                  <div class="balance">Current Balance: {{formatCurrency balance currencySymbol}}</div>
-                  
-                  <p>To ensure uninterrupted service, we recommend topping up your account when your balance falls below {{formatCurrency threshold currencySymbol}}.</p>
-                  
-                  <div style="text-align: center;">
-                    <a href="{{topUpUrl}}" class="button">Top Up Now</a>
-                  </div>
-                  
-                  <p>Thank you for using JayLink SMS!</p>
-                </div>
-                <div class="footer">
-                  <p>&copy; {{currentYear}} JayLink SMS. All rights reserved.</p>
-                </div>
-              </div>
-            </body>
-            </html>
-          `;
-          break;
-          
-        default:
-          fallbackTemplate = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="UTF-8">
-              <title>{{title}}</title>
-              <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .content { background: #f9fafb; padding: 30px; border-radius: 8px; }
-                .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="content">
-                  <h2>{{title}}</h2>
-                  <p>Hello {{firstName}},</p>
-                  <p>{{message}}</p>
-                  <p>Best regards,<br>The JayLink Team</p>
-                </div>
-                <div class="footer">
-                  <p>&copy; {{currentYear}} JayLink SMS. All rights reserved.</p>
-                </div>
-              </div>
-            </body>
-            </html>
-          `;
-      }
+      // Create a fallback template
+      const fallbackTemplate = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${templateName}</title>
+        </head>
+        <body>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2>{{title}}</h2>
+            <p>Hello {{firstName}},</p>
+            <p>{{message}}</p>
+            <p>Best regards,<br>The JayLink Team</p>
+          </div>
+        </body>
+        </html>
+      `;
       
       return handlebars.compile(fallbackTemplate);
     }
@@ -242,34 +153,6 @@ const sendTemplateEmail = async (options) => {
 };
 
 /**
- * NEW: Send a payment success email
- * @param {Object} user - User object
- * @param {Object} paymentData - Payment data
- * @returns {Promise<boolean>} Success status
- */
-const sendPaymentSuccessEmail = async (user, paymentData) => {
-  return sendTemplateEmail({
-    to: user.email,
-    subject: `Payment Successful - ${paymentData.currencySymbol}${paymentData.amount.toFixed(2)} Added to Your Account`,
-    template: 'payment-success',
-    context: {
-      title: 'Payment Successful',
-      firstName: user.firstName,
-      lastName: user.lastName,
-      amount: paymentData.amount,
-      currencySymbol: paymentData.currency || '₦',
-      paymentMethod: paymentData.paymentMethod || 'Paystack',
-      reference: paymentData.reference,
-      newBalance: paymentData.newBalance,
-      transactionId: paymentData.transactionId,
-      timestamp: new Date().toISOString(),
-      appUrl: config.frontendUrl,
-      message: `Your payment of ${paymentData.currency}${paymentData.amount.toFixed(2)} has been processed successfully and added to your JayLink SMS account.`
-    },
-  });
-};
-
-/**
  * Send a welcome email to a new user
  * @param {Object} user - User object
  * @returns {Promise<boolean>} Success status
@@ -284,6 +167,8 @@ const sendWelcomeEmail = async (user) => {
       firstName: user.firstName,
       lastName: user.lastName,
       appUrl: config.frontendUrl,
+      appName: 'JayLink SMS',
+      supportEmail: config.email.from,
       message: 'Thank you for joining JayLink SMS, your reliable platform for SMS and voice messaging. We\'re excited to have you onboard!'
     },
   });
@@ -307,6 +192,9 @@ const sendPasswordResetEmail = async (user, token) => {
       firstName: user.firstName,
       resetUrl,
       expiryTime: '1 hour', // This should match your token expiry
+      appUrl: config.frontendUrl,
+      appName: 'JayLink SMS',
+      supportEmail: config.email.from,
       message: 'We received a request to reset your password. If you didn\'t make this request, you can safely ignore this email.'
     },
   });
@@ -328,7 +216,9 @@ const sendPasswordResetConfirmation = async (user, tempPassword) => {
       firstName: user.firstName,
       tempPassword: tempPassword,
       loginUrl: `${config.frontendUrl}/login`,
-      supportEmail: 'support@jaylink.com',
+      supportEmail: config.email.from,
+      appUrl: config.frontendUrl,
+      appName: 'JayLink SMS',
       message: 'Your password has been reset by an administrator. Please use the temporary password below to log in, then change your password immediately.'
     },
   });
@@ -347,22 +237,80 @@ const sendPasswordChangedEmail = async (user) => {
     context: {
       title: 'Password Changed Successfully',
       firstName: user.firstName,
-      supportEmail: 'support@jaylink.com',
+      supportEmail: config.email.from,
       appUrl: config.frontendUrl,
+      appName: 'JayLink SMS',
       message: 'Your password has been successfully changed. If you did not make this change, please contact support immediately.'
     },
   });
 };
 
 /**
- * Send a low balance alert email - ENHANCED with configurable threshold
+ * FIXED: Send a payment success email with proper currency handling
+ * @param {Object} user - User object
+ * @param {number} amount - Payment amount
+ * @param {string} paymentMethod - Payment method used
+ * @param {string} reference - Payment reference
+ * @param {number} newBalance - New account balance (optional)
+ * @param {string} [transactionId] - Transaction ID (optional)
+ * @returns {Promise<boolean>} Success status
+ */
+const sendPaymentSuccessEmail = async (user, amount, paymentMethod, reference, newBalance, transactionId) => {
+  try {
+    const currency = config.currency || { symbol: '₦', code: 'NGN', name: 'Nigerian Naira' };
+    
+    // FIXED: Calculate newBalance if not provided
+    let calculatedNewBalance = newBalance;
+    if (!newBalance && user.balance !== undefined) {
+      calculatedNewBalance = parseFloat(user.balance) + parseFloat(amount);
+    }
+    
+    return await sendTemplateEmail({
+      to: user.email,
+      subject: `Payment Successful - ${currency.symbol}${parseFloat(amount).toFixed(2)} Added to Your Account`,
+      template: 'payment-success',
+      context: {
+        title: 'Topup Payment Successful',
+        firstName: user.firstName || user.name || 'User',
+        lastName: user.lastName || '',
+        amount: parseFloat(amount),
+        currencySymbol: currency.symbol,
+        currencyCode: currency.code,
+        paymentMethod: paymentMethod || 'Online Payment',
+        reference: reference,
+        newBalance: calculatedNewBalance ? parseFloat(calculatedNewBalance) : parseFloat(amount),
+        transactionId: transactionId,
+        timestamp: new Date().toISOString(),
+        balanceUrl: `${config.frontendUrl}/balance`,
+        transactionsUrl: `${config.frontendUrl}/transactions`,
+        appUrl: config.frontendUrl,
+        appName: 'JayLink SMS',
+        supportEmail: config.email.from
+      }
+    });
+  } catch (error) {
+    logger.error(`Failed to send payment success email: ${error.message}`, {
+      userId: user.id,
+      amount,
+      reference,
+      error: error.message,
+      stack: error.stack
+    });
+    return false;
+  }
+};
+
+/**
+ * Send a low balance alert email
  * @param {Object} user - User object
  * @param {number} balance - Current balance
  * @param {number} threshold - Low balance threshold
- * @param {Object} currency - Currency configuration
+ * @param {Object} currency - Currency object
  * @returns {Promise<boolean>} Success status
  */
-const sendLowBalanceEmail = async (user, balance, threshold, currency = { symbol: '₦' }) => {
+const sendLowBalanceEmail = async (user, balance, threshold, currency) => {
+  const currencyInfo = currency || config.currency || { symbol: '₦', code: 'NGN' };
+  
   return sendTemplateEmail({
     to: user.email,
     subject: 'Low Balance Alert - JayLink SMS',
@@ -370,11 +318,13 @@ const sendLowBalanceEmail = async (user, balance, threshold, currency = { symbol
     context: {
       title: 'Low Balance Alert',
       firstName: user.firstName,
-      balance: balance.toFixed(2),
-      threshold: threshold.toFixed(2),
-      currencySymbol: currency.symbol || '₦',
+      balance: parseFloat(balance).toFixed(2),
+      threshold: parseFloat(threshold).toFixed(2),
+      currencySymbol: currencyInfo.symbol,
       topUpUrl: `${config.frontendUrl}/balance`,
       appUrl: config.frontendUrl,
+      appName: 'JayLink SMS',
+      supportEmail: config.email.from,
       message: 'Your account balance is below the recommended minimum threshold. Please top up your account to ensure uninterrupted service.'
     },
   });
@@ -400,6 +350,9 @@ const sendDeliveryReportEmail = async (user, message) => {
       failed: message.failed,
       sentTime: message.sentTime,
       reportUrl: `${config.frontendUrl}/analytics`,
+      appUrl: config.frontendUrl,
+      appName: 'JayLink SMS',
+      supportEmail: config.email.from,
       message: 'Here is the delivery report for your recent message campaign.'
     },
   });
@@ -410,8 +363,8 @@ module.exports = {
   sendWelcomeEmail,
   sendPasswordResetEmail,
   sendPasswordChangedEmail,
+  sendPaymentSuccessEmail,
   sendLowBalanceEmail,
   sendDeliveryReportEmail,
   sendPasswordResetConfirmation,
-  sendPaymentSuccessEmail, // NEW: Payment success email
 };

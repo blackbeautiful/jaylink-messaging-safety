@@ -9,8 +9,10 @@ import axios, {
 } from 'axios';
 import { toast } from 'sonner';
 
-// Base API URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || 'https://jaylink-messaging-safety.up.railway.app/api';
+// Base API URL from environment variables - MAKE SURE NO TRAILING SLASH
+const API_URL = (
+  import.meta.env.VITE_API_URL || 'https://jaylink-messaging-safety.up.railway.app/api'
+).replace(/\/$/, '');
 
 // API configuration types
 export interface ApiConfig {
@@ -132,7 +134,7 @@ export const apiUtils = {
   },
 
   /**
-   * Create API endpoints
+   * Create API endpoints - MAKE SURE ALL START WITH /
    */
   endpoints: {
     auth: {

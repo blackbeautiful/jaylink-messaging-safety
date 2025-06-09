@@ -1020,234 +1020,266 @@ const processCsvPhoneNumbers = async (filePath) => {
 };
 
 /**
- * Process scheduled messages that are due
+ * Process scheduled messages that are due - SAFE VERSION WITH TABLE CHECK
  * @returns {Object} Processing results
  */
 const processScheduledMessages = async () => {
-  const t = await db.sequelize.transaction();
-  
+  const result = {
+    processed: 0,
+    success: 0,
+    failed: 0,
+    errors: []
+  };
+
   try {
-    // Find due messages with a small buffer to avoid race conditions
-    const now = new Date();
-    const bufferTime = new Date(now.getTime() + 30 * 1000); // 30 seconds buffer
-    
-    const dueMessages = await ScheduledMessage.findAll({
-      where: {
-        status: 'pending',
-        scheduledAt: { 
-          [Op.lte]: bufferTime,
-          [Op.gte]: new Date(now.getTime() - 5 * 60 * 1000) // Not older than 5 minutes
-        },
-      },
-      limit: 50, // Process in smaller batches
-      transaction: t,
-      order: [['scheduledAt', 'ASC']]
-    });
-    
-    if (dueMessages.length === 0) {
-      await t.commit();
-      logger.debug('No scheduled messages due for processing');
-      return { processed: 0, success: 0, failed: 0 };
+    // SAFETY CHECK: Verify ScheduledMessage model exists and table is accessible
+    if (!db.ScheduledMessage) {
+      logger.warn('ScheduledMessage model not available - skipping scheduled message processing');
+      return result;
     }
-    
-    logger.info(`Processing ${dueMessages.length} scheduled messages`);
-    
-    let successCount = 0;
-    let failedCount = 0;
-    
-    for (const scheduledMessage of dueMessages) {
-      try {
-        // Mark as processing first to prevent duplicate processing
-        await scheduledMessage.update({ status: 'processing' }, { transaction: t });
-        
-        const user = await User.findByPk(scheduledMessage.userId, { transaction: t });
-        if (!user) {
-          throw new Error('User not found');
-        }
-        
-        let phoneNumbers = [];
-        try {
-          phoneNumbers = JSON.parse(scheduledMessage.recipients);
-          if (!Array.isArray(phoneNumbers)) {
-            throw new Error('Recipients is not an array');
-          }
-        } catch (error) {
-          throw new Error(`Failed to parse recipients: ${error.message}`);
-        }
-        
-        // Recalculate cost to ensure accuracy
-        const cost = smsProviderService.calculateMessageCost(
-          scheduledMessage.recipientCount || phoneNumbers.length,
-          scheduledMessage.message
-        );
-        
-        // Check user balance
-        const currentBalance = await balanceService.getUserBalance(user.id);
-        if (currentBalance < cost) {
-          throw new Error('Insufficient balance');
-        }
-        
-        const messageId = generateUniqueId(`${scheduledMessage.type}_scheduled`);
-        
-        let providerResult;
-        if (scheduledMessage.type === 'sms') {
-          providerResult = await smsProviderService.sendSms(
-            phoneNumbers,
-            scheduledMessage.message,
-            scheduledMessage.senderId
-          );
-        } else if (scheduledMessage.type === 'voice') {
-          // Implement voice call logic when available
-          throw new Error('Voice messages not yet implemented');
-        } else if (scheduledMessage.type === 'audio') {
-          // Implement audio message logic when available
-          throw new Error('Audio messages not yet implemented');
-        }
-        
-        // Deduct balance
-        await balanceService.deductBalance(
-          user.id,
-          cost,
-          `scheduled_${scheduledMessage.type}`,
-          `Scheduled ${scheduledMessage.type.toUpperCase()} to ${phoneNumbers.length} recipient(s)`,
-          { transaction: t }
-        );
-        
-        // Create message record
-        await Message.create({
-          userId: user.id,
-          messageId,
-          type: scheduledMessage.type,
-          content: scheduledMessage.message,
-          audioUrl: scheduledMessage.audioUrl,
-          senderId: scheduledMessage.senderId,
-          recipients: JSON.stringify(phoneNumbers),
-          recipientCount: phoneNumbers.length,
-          cost,
-          status: 'sent',
-          scheduled: true,
-          scheduledAt: scheduledMessage.scheduledAt,
-        }, { transaction: t });
-        
-        // Mark scheduled message as sent
-        await scheduledMessage.update({ 
-          status: 'sent',
-          processedAt: new Date()
-        }, { transaction: t });
-        
-        // Send WebSocket notification (outside transaction)
-        process.nextTick(() => {
-          try {
-            const websocket = require('../utils/websocket.util');
-            if (websocket.isInitialized()) {
-              websocket.emit(`user:${user.id}`, 'scheduled_update', {
-                id: scheduledMessage.id,
-                status: 'sent',
-                recipientCount: phoneNumbers.length,
-                messageId: messageId,
-                timestamp: new Date().toISOString()
-              });
-            }
-          } catch (wsError) {
-            logger.error(`WebSocket notification error: ${wsError.message}`);
-          }
-        });
-        
-        // Create success notification (outside transaction)
-        process.nextTick(() => {
-          notificationService.createNotification(
-            user.id,
-            'Scheduled Message Sent',
-            `Your scheduled message to ${phoneNumbers.length} recipient(s) has been sent successfully.`,
-            'success',
-            {
-              action: 'scheduled-message-sent',
-              messageId: messageId,
-              originalScheduleId: scheduledMessage.id,
-              recipientCount: phoneNumbers.length,
-              cost: cost,
-              timestamp: new Date().toISOString()
-            },
-            false
-          ).catch(err => logger.error(`Notification error: ${err.message}`));
-        });
-        
-        successCount++;
-        logger.info(`Successfully processed scheduled message ${scheduledMessage.id}`);
-        
-      } catch (error) {
-        logger.error(`Failed to process scheduled message ${scheduledMessage.id}: ${error.message}`, {
-          stack: error.stack,
-          messageId: scheduledMessage.id
-        });
-        
-        // Mark as failed
-        await scheduledMessage.update({ 
-          status: 'failed',
-          errorMessage: error.message,
-          processedAt: new Date()
-        }, { transaction: t });
-        
-        // Send WebSocket notification for failure (outside transaction)
-        process.nextTick(() => {
-          try {
-            const websocket = require('../utils/websocket.util');
-            if (websocket.isInitialized()) {
-              websocket.emit(`user:${scheduledMessage.userId}`, 'scheduled_update', {
-                id: scheduledMessage.id,
-                status: 'failed',
-                recipientCount: scheduledMessage.recipientCount,
-                errorMessage: error.message,
-                timestamp: new Date().toISOString()
-              });
-            }
-          } catch (wsError) {
-            logger.error(`WebSocket failure notification error: ${wsError.message}`);
-          }
-        });
-        
-        // Create failure notification (outside transaction)
-        process.nextTick(() => {
-          notificationService.createNotification(
-            scheduledMessage.userId,
-            'Scheduled Message Failed',
-            `Your scheduled message could not be sent: ${error.message}`,
-            'error',
-            {
-              action: 'scheduled-message-failed',
-              scheduleId: scheduledMessage.id,
-              recipientCount: scheduledMessage.recipientCount,
-              error: error.message,
-              timestamp: new Date().toISOString()
-            },
-            true // Send email for failures
-          ).catch(err => logger.error(`Notification error: ${err.message}`));
-        });
-        
-        failedCount++;
+
+    // Test if the table exists by trying a simple query
+    try {
+      await db.ScheduledMessage.findOne({ limit: 1 });
+    } catch (error) {
+      if (error.message.includes("doesn't exist") || 
+          error.message.includes("Table") || 
+          error.name === 'SequelizeDatabaseError') {
+        logger.warn('scheduled_messages table does not exist - skipping processing');
+        return result;
       }
+      // Re-throw if it's a different type of error
+      throw error;
     }
+
+    const t = await db.sequelize.transaction();
     
-    await t.commit();
-    
-    const result = {
-      processed: dueMessages.length,
-      success: successCount,
-      failed: failedCount
-    };
-    
-    if (result.processed > 0) {
-      logger.info(`Scheduled message processing completed: ${successCount} success, ${failedCount} failed`);
+    try {
+      // Find due messages with a small buffer to avoid race conditions
+      const now = new Date();
+      const bufferTime = new Date(now.getTime() + 30 * 1000); // 30 seconds buffer
+      
+      const dueMessages = await ScheduledMessage.findAll({
+        where: {
+          status: 'pending',
+          scheduledAt: { 
+            [Op.lte]: bufferTime,
+            [Op.gte]: new Date(now.getTime() - 5 * 60 * 1000) // Not older than 5 minutes
+          },
+        },
+        limit: 50, // Process in smaller batches
+        transaction: t,
+        order: [['scheduledAt', 'ASC']]
+      });
+      
+      if (dueMessages.length === 0) {
+        await t.commit();
+        logger.debug('No scheduled messages due for processing');
+        return result;
+      }
+      
+      logger.info(`Processing ${dueMessages.length} scheduled messages`);
+      
+      let successCount = 0;
+      let failedCount = 0;
+      
+      for (const scheduledMessage of dueMessages) {
+        try {
+          // Mark as processing first to prevent duplicate processing
+          await scheduledMessage.update({ status: 'processing' }, { transaction: t });
+          
+          const user = await User.findByPk(scheduledMessage.userId, { transaction: t });
+          if (!user) {
+            throw new Error('User not found');
+          }
+          
+          let phoneNumbers = [];
+          try {
+            phoneNumbers = JSON.parse(scheduledMessage.recipients);
+            if (!Array.isArray(phoneNumbers)) {
+              throw new Error('Recipients is not an array');
+            }
+          } catch (error) {
+            throw new Error(`Failed to parse recipients: ${error.message}`);
+          }
+          
+          // Recalculate cost to ensure accuracy
+          const cost = smsProviderService.calculateMessageCost(
+            scheduledMessage.recipientCount || phoneNumbers.length,
+            scheduledMessage.message
+          );
+          
+          // Check user balance
+          const currentBalance = await balanceService.getUserBalance(user.id);
+          if (currentBalance < cost) {
+            throw new Error('Insufficient balance');
+          }
+          
+          const messageId = generateUniqueId(`${scheduledMessage.type}_scheduled`);
+          
+          let providerResult;
+          if (scheduledMessage.type === 'sms') {
+            providerResult = await smsProviderService.sendSms(
+              phoneNumbers,
+              scheduledMessage.message,
+              scheduledMessage.senderId
+            );
+          } else if (scheduledMessage.type === 'voice') {
+            // Implement voice call logic when available
+            throw new Error('Voice messages not yet implemented');
+          } else if (scheduledMessage.type === 'audio') {
+            // Implement audio message logic when available
+            throw new Error('Audio messages not yet implemented');
+          }
+          
+          // Deduct balance
+          await balanceService.deductBalance(
+            user.id,
+            cost,
+            `scheduled_${scheduledMessage.type}`,
+            `Scheduled ${scheduledMessage.type.toUpperCase()} to ${phoneNumbers.length} recipient(s)`,
+            { transaction: t }
+          );
+          
+          // Create message record
+          await Message.create({
+            userId: user.id,
+            messageId,
+            type: scheduledMessage.type,
+            content: scheduledMessage.message,
+            audioUrl: scheduledMessage.audioUrl,
+            senderId: scheduledMessage.senderId,
+            recipients: JSON.stringify(phoneNumbers),
+            recipientCount: phoneNumbers.length,
+            cost,
+            status: 'sent',
+            scheduled: true,
+            scheduledAt: scheduledMessage.scheduledAt,
+          }, { transaction: t });
+          
+          // Mark scheduled message as sent
+          await scheduledMessage.update({ 
+            status: 'sent',
+            processedAt: new Date()
+          }, { transaction: t });
+          
+          // Send WebSocket notification (outside transaction)
+          process.nextTick(() => {
+            try {
+              const websocket = require('../utils/websocket.util');
+              if (websocket.isInitialized()) {
+                websocket.emit(`user:${user.id}`, 'scheduled_update', {
+                  id: scheduledMessage.id,
+                  status: 'sent',
+                  recipientCount: phoneNumbers.length,
+                  messageId: messageId,
+                  timestamp: new Date().toISOString()
+                });
+              }
+            } catch (wsError) {
+              logger.error(`WebSocket notification error: ${wsError.message}`);
+            }
+          });
+          
+          // Create success notification (outside transaction)
+          process.nextTick(() => {
+            notificationService.createNotification(
+              user.id,
+              'Scheduled Message Sent',
+              `Your scheduled message to ${phoneNumbers.length} recipient(s) has been sent successfully.`,
+              'success',
+              {
+                action: 'scheduled-message-sent',
+                messageId: messageId,
+                originalScheduleId: scheduledMessage.id,
+                recipientCount: phoneNumbers.length,
+                cost: cost,
+                timestamp: new Date().toISOString()
+              },
+              false
+            ).catch(err => logger.error(`Notification error: ${err.message}`));
+          });
+          
+          successCount++;
+          logger.info(`Successfully processed scheduled message ${scheduledMessage.id}`);
+          
+        } catch (error) {
+          logger.error(`Failed to process scheduled message ${scheduledMessage.id}: ${error.message}`, {
+            stack: error.stack,
+            messageId: scheduledMessage.id
+          });
+          
+          // Mark as failed
+          await scheduledMessage.update({ 
+            status: 'failed',
+            errorMessage: error.message,
+            processedAt: new Date()
+          }, { transaction: t });
+          
+          // Send WebSocket notification for failure (outside transaction)
+          process.nextTick(() => {
+            try {
+              const websocket = require('../utils/websocket.util');
+              if (websocket.isInitialized()) {
+                websocket.emit(`user:${scheduledMessage.userId}`, 'scheduled_update', {
+                  id: scheduledMessage.id,
+                  status: 'failed',
+                  recipientCount: scheduledMessage.recipientCount,
+                  errorMessage: error.message,
+                  timestamp: new Date().toISOString()
+                });
+              }
+            } catch (wsError) {
+              logger.error(`WebSocket failure notification error: ${wsError.message}`);
+            }
+          });
+          
+          // Create failure notification (outside transaction)
+          process.nextTick(() => {
+            notificationService.createNotification(
+              scheduledMessage.userId,
+              'Scheduled Message Failed',
+              `Your scheduled message could not be sent: ${error.message}`,
+              'error',
+              {
+                action: 'scheduled-message-failed',
+                scheduleId: scheduledMessage.id,
+                recipientCount: scheduledMessage.recipientCount,
+                error: error.message,
+                timestamp: new Date().toISOString()
+              },
+              true // Send email for failures
+            ).catch(err => logger.error(`Notification error: ${err.message}`));
+          });
+          
+          failedCount++;
+        }
+      }
+      
+      await t.commit();
+      
+      const finalResult = {
+        processed: dueMessages.length,
+        success: successCount,
+        failed: failedCount
+      };
+      
+      if (finalResult.processed > 0) {
+        logger.info(`Scheduled message processing completed: ${successCount} success, ${failedCount} failed`);
+      }
+      
+      return finalResult;
+      
+    } catch (error) {
+      await t.rollback();
+      throw error;
     }
-    
-    return result;
-    
   } catch (error) {
-    await t.rollback();
     logger.error(`Process scheduled messages error: ${error.message}`, { 
       stack: error.stack
     });
-    throw error;
+    result.errors.push({ error: error.message });
+    return result;
   }
 };
 

@@ -210,7 +210,6 @@ if (config.env === 'production') {
   const requiredEnvVars = [
     'JWT_SECRET',
     'JWT_REFRESH_SECRET',
-    'SMS_PROVIDER_API_KEY',
     'PAYSTACK_SECRET_KEY',
     'PAYSTACK_WEBHOOK_SECRET',
   ];

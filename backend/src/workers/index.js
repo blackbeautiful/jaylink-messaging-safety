@@ -1,4 +1,4 @@
-// backend/src/workers/index.js - Fixed worker initialization for scheduled messages
+// backend/src/workers/index.js - Fixed worker initialization
 const logger = require('../config/logger');
 const Queue = require('../utils/queue.util');
 const smsService = require('../services/sms.service');
@@ -28,7 +28,7 @@ let scheduledProcessorInterval = null;
 /**
  * Initialize all worker processes
  */
-const initializeWorkers = () => {
+const initializeWorkers = (options = {}) => {
   logger.info('Initializing background workers...');
   
   try {
@@ -60,8 +60,13 @@ const initializeWorkers = () => {
       setupMaintenanceTasks();
     }
     
-    // Set up scheduled message processor - FIXED
-    setupScheduledMessageProcessor();
+    // DISABLED: Set up scheduled message processor until database is fixed
+    if (!options.limitedMode) {
+      logger.info('🔧 Scheduled message processor disabled until database issues are resolved');
+      // setupScheduledMessageProcessor();
+    } else {
+      logger.info('🔧 Running in limited mode - scheduled message processor disabled');
+    }
     
     // Initialize system monitoring worker
     if (config.monitoring?.enabled) {
@@ -75,7 +80,7 @@ const initializeWorkers = () => {
       backupScheduler = scheduleBackups();
     }
     
-    logger.info('Background workers initialized successfully');
+    logger.info('Background workers initialized successfully (scheduled messages disabled)');
   } catch (error) {
     logger.error(`Worker initialization error: ${error.message}`, { stack: error.stack });
     logger.warn('Continuing without some background workers');
@@ -136,9 +141,14 @@ const setupMaintenanceTasks = () => {
 };
 
 /**
- * Set up scheduled message processor - FIXED
+ * Set up scheduled message processor - TEMPORARILY DISABLED
  */
 const setupScheduledMessageProcessor = () => {
+  logger.warn('⚠️  Scheduled message processor is temporarily disabled due to database issues');
+  logger.warn('⚠️  Enable it after fixing the scheduled_messages table');
+  
+  // Commented out until database is fixed
+  /*
   try {
     // Use both queue-based and interval-based processing for reliability
     
@@ -202,6 +212,7 @@ const setupScheduledMessageProcessor = () => {
   } catch (error) {
     logger.error(`Failed to set up scheduled message processor: ${error.message}`);
   }
+  */
 };
 
 /**
@@ -209,6 +220,11 @@ const setupScheduledMessageProcessor = () => {
  * @param {number} interval - Processing interval in milliseconds (default: 30 seconds)
  */
 const startScheduledMessageProcessor = (interval = 30000) => {
+  logger.warn('⚠️  Scheduled message processor is disabled until database issues are resolved');
+  return;
+  
+  // Commented out until database is fixed
+  /*
   logger.info(`Starting scheduled message processor with ${interval}ms interval`);
   
   // Clear any existing interval
@@ -247,6 +263,7 @@ const startScheduledMessageProcessor = (interval = 30000) => {
       }
     }, interval);
   }
+  */
 };
 
 /**
@@ -329,8 +346,9 @@ const shutdown = async () => {
 const getWorkerHealth = () => {
   const health = {
     scheduledProcessor: {
-      queueBased: scheduledQueue && scheduledQueue.queue ? 'active' : 'inactive',
-      intervalBased: scheduledProcessorInterval ? 'active' : 'inactive',
+      queueBased: 'disabled', // scheduledQueue && scheduledQueue.queue ? 'active' : 'inactive',
+      intervalBased: 'disabled', // scheduledProcessorInterval ? 'active' : 'inactive',
+      status: 'disabled_until_database_fixed'
     },
     queues: {
       pushNotifications: pushQueue && pushQueue.queue ? 'active' : 'inactive',
@@ -346,9 +364,14 @@ const getWorkerHealth = () => {
 };
 
 /**
- * Force process scheduled messages (for manual triggers)
+ * Force process scheduled messages (for manual triggers) - DISABLED
  */
 const forceProcessScheduledMessages = async () => {
+  logger.warn('⚠️  Scheduled message processing is disabled until database issues are resolved');
+  return { processed: 0, success: 0, failed: 0, error: 'Disabled until database is fixed' };
+  
+  // Commented out until database is fixed
+  /*
   try {
     logger.info('Manually triggering scheduled message processing');
     const result = await smsService.processScheduledMessages();
@@ -358,6 +381,7 @@ const forceProcessScheduledMessages = async () => {
     logger.error(`Manual scheduled message processing error: ${error.message}`);
     throw error;
   }
+  */
 };
 
 /**
@@ -388,7 +412,7 @@ const getQueueStats = async () => {
           active: active.length,
           completed: completed.length,
           failed: failed.length,
-          status: 'healthy'
+          status: name === 'scheduledMessages' ? 'disabled' : 'healthy'
         };
       } else {
         stats[name] = {
@@ -396,7 +420,7 @@ const getQueueStats = async () => {
           active: 0,
           completed: 0,
           failed: 0,
-          status: 'inactive'
+          status: name === 'scheduledMessages' ? 'disabled' : 'inactive'
         };
       }
     } catch (error) {

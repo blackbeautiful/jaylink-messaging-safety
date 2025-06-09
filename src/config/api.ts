@@ -10,7 +10,7 @@ import axios, {
 import { toast } from 'sonner';
 
 // Base API URL from environment variables
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://jaylink-messaging-safety.up.railway.app/api';
 
 // API configuration types
 export interface ApiConfig {

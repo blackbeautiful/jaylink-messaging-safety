@@ -156,35 +156,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Register function
   const register = async (userData: RegisterData) => {
+    // Add debugging logs
+    console.log('=== REGISTRATION DEBUG ===');
+    console.log('API_URL from env:', import.meta.env.VITE_API_URL);
+    console.log('Fallback API_URL:', 'https://jaylink-messaging-safety.up.railway.app/api');
+    console.log('Final API URL being used:', api.defaults.baseURL);
+    console.log(
+      'Registration endpoint:',
+      `${api.defaults.baseURL}${apiUtils.endpoints.auth.register}`
+    );
+    console.log('Registration data:', userData);
+    console.log('========================');
+
     setLoading(true);
     try {
       const response = await api.post(apiUtils.endpoints.auth.register, userData);
+      console.log('Registration response:', response);
 
       if (response.data.success) {
-        // Just store the token but don't automatically log in
         localStorage.setItem('token', response.data.data.token);
-
-        // Navigate to login instead of dashboard
         navigate('/login', {
           state: { message: 'Registration successful! Please log in.' },
           replace: true,
         });
-
         toast.success('Your account has been created successfully.');
         return;
       }
 
       throw new Error(response.data.message || 'Registration failed');
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('=== REGISTRATION ERROR ===');
+      console.error('Full error object:', error);
+      console.error('Error response:', error.response);
+      console.error('Error status:', error.response?.status);
+      console.error('Error data:', error.response?.data);
+      console.error('========================');
 
-      // Use centralized error handling
       const errorMessage = apiUtils.handleError(
         error,
         'There was a problem creating your account. Please try again.'
       );
       toast.error(errorMessage);
-
       throw error;
     } finally {
       setLoading(false);

@@ -74,7 +74,10 @@ const ForgotPassword = () => {
           {/* Logo */}
           <div className="text-center mb-6">
             <Link to="/" className="inline-block">
-              <img src={LogoImg} alt="Logo" width={120} height={40} />
+              {/* <img src={LogoImg} alt="Logo" width={120} height={40} /> */}
+              <span className="font-bold text-3xl text-jaylink-800 dark:text-white">
+                Jay<span className="text-jaylink-600">Link</span>
+              </span>
             </Link>
           </div>
           

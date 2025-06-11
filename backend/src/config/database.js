@@ -1,4 +1,4 @@
-// backend/src/config/database.js - FIXED VERSION
+// backend/src/config/database.js - PRODUCTION FIXED VERSION
 const config = require('./config');
 const logger = require('./logger');
 
@@ -57,7 +57,7 @@ const getTimezoneConfig = () => {
     if (isProduction) {
       // Default to UTC in production for consistency
       logger.info('Using UTC timezone for production consistency');
-      return '+00:00';
+      return 'UTC';
     }
     
     // Development fallback
@@ -230,8 +230,12 @@ const sequelizeConfig = {
     
     // Connection timeout settings
     connectTimeout: 60000,
-    // Remove invalid options that were causing warnings
-    charset: 'utf8mb4'
+    acquireTimeout: 60000,
+    timeout: 60000,
+    
+    // Character set
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci'
   },
   
   // Model defaults
@@ -293,7 +297,7 @@ const sequelizeConfig = {
 };
 
 /**
- * Production health check function - FIXED
+ * Production health check function
  */
 const healthCheck = async () => {
   try {
@@ -335,7 +339,7 @@ const getCurrentDbTime = () => {
 };
 
 /**
- * Production-safe connection test - FIXED SQL QUERY
+ * Production-safe connection test
  */
 const testConnection = async () => {
   const startTime = Date.now();
@@ -359,15 +363,27 @@ const testConnection = async () => {
     // Test authentication
     await testSequelize.authenticate();
     
-    // Test query execution - FIXED: Use proper SQL syntax
-    const [results] = await testSequelize.query('SELECT VERSION() as version, NOW() as current_time');
-    
-    testResult.connectionTime = Date.now() - startTime;
-    testResult.success = true;
-    testResult.serverInfo = {
-      version: results[0]?.version || 'Unknown',
-      serverTime: results[0]?.current_time || 'Unknown'
-    };
+    try {
+      // Test query execution
+      // Update the test query to use parameterized style:
+      const [results] = await testSequelize.query('SELECT VERSION() as `version`, NOW() as `server_time`');
+      
+      testResult.connectionTime = Date.now() - startTime;
+      testResult.success = true;
+      testResult.serverInfo = {
+        version: results[0]?.version || 'Unknown',
+        serverTime: results[0]?.server_time || 'Unknown'
+      };
+    } catch (queryError) {
+      logger.error('Test query failed:', queryError);
+      // Fallback to simpler query
+      const [simpleResults] = await testSequelize.query('SELECT 1 as test_value');
+      testResult.serverInfo = {
+        version: 'Unknown',
+        serverTime: 'Unknown',
+        testQueryPassed: !!simpleResults
+      };
+    }
     
     await testSequelize.close();
     

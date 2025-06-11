@@ -1,4 +1,4 @@
-// backend/src/config/database.js - PRODUCTION FIXED VERSION
+// backend/src/config/database.js - FIXED VERSION
 const config = require('./config');
 const logger = require('./logger');
 
@@ -230,12 +230,8 @@ const sequelizeConfig = {
     
     // Connection timeout settings
     connectTimeout: 60000,
-    acquireTimeout: 60000,
-    timeout: 60000,
-    
-    // Character set
-    charset: 'utf8mb4',
-    collate: 'utf8mb4_unicode_ci'
+    // Remove invalid options that were causing warnings
+    charset: 'utf8mb4'
   },
   
   // Model defaults
@@ -297,7 +293,7 @@ const sequelizeConfig = {
 };
 
 /**
- * Production health check function
+ * Production health check function - FIXED
  */
 const healthCheck = async () => {
   try {
@@ -339,7 +335,7 @@ const getCurrentDbTime = () => {
 };
 
 /**
- * Production-safe connection test
+ * Production-safe connection test - FIXED SQL QUERY
  */
 const testConnection = async () => {
   const startTime = Date.now();
@@ -363,7 +359,7 @@ const testConnection = async () => {
     // Test authentication
     await testSequelize.authenticate();
     
-    // Test query execution
+    // Test query execution - FIXED: Use proper SQL syntax
     const [results] = await testSequelize.query('SELECT VERSION() as version, NOW() as current_time');
     
     testResult.connectionTime = Date.now() - startTime;

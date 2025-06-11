@@ -24,7 +24,6 @@ const serverState = {
   startupTime: Date.now(),
   databaseIssues: [],
   isProduction: config.env === 'production',
-  isRailway: !!(process.env.RAILWAY_ENVIRONMENT_NAME || process.env.DATABASE_URL),
   retryCount: 0,
   maxRetries: 3
 };
@@ -891,13 +890,6 @@ function validateProductionConfig() {
     'JWT_SECRET',
     'JWT_REFRESH_SECRET'
   ];
-  
-  // Add database URL requirement for Railway
-  if (serverState.isRailway) {
-    requiredEnvVars.push('DATABASE_URL');
-  } else {
-    requiredEnvVars.push('DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME');
-  }
   
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
   

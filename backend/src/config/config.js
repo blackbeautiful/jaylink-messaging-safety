@@ -25,8 +25,6 @@ const config = {
     user: process.env.DB_USER || 'jaylink_user',
     password: process.env.DB_PASSWORD || 'jaylinkdev123',
     name: process.env.DB_NAME || 'jaylink_db',
-    // Handle Railway's database URL format if provided
-    url: process.env.DATABASE_URL || null,
     timezone: process.env.DB_TIMEZONE || process.env.APP_TIMEZONE,
   },
 

@@ -184,12 +184,9 @@ const sequelizeConfig = {
 
     // Connection timeout settings
     connectTimeout: 60000,
-    acquireTimeout: 60000,
-    timeout: 60000,
 
     // Character set
-    charset: 'utf8mb4',
-    collate: 'utf8mb4_unicode_ci',
+    charset: 'utf8mb4'
   },
 
   // Model defaults

@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 
 // Base API URL from environment variables - MAKE SURE NO TRAILING SLASH
 const API_URL = (
-  import.meta.env.VITE_API_URL || 'https://jaylink-messaging-safety-ok.up.railway.app/api'
+  import.meta.env.VITE_API_URL || 'https://jaylink-messaging-safety-production.up.railway.app/api'
 ).replace(/\/$/, '');
 
 // API configuration types
